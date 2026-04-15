@@ -33,7 +33,7 @@ Download from [ffmpeg.org](https://ffmpeg.org/download.html), add to PATH.
 
 ```bash
 # 1. Clone / download this folder
-cd video_metadata_hub
+cd VidMeta-AI
 
 # 2. Create virtual environment (recommended)
 python -m venv venv
