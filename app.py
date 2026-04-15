@@ -1,7 +1,7 @@
 """
-Video Metadata Hub
-------------------
-Analyze local videos with AI → Generate platform-ready metadata
+VidMeta AI
+----------
+Analyze local videos with AI → Generate upload-ready metadata
 for YouTube, Instagram, Facebook, TikTok, LinkedIn.
 """
 
@@ -17,10 +17,10 @@ import io as csv_io
 from pathlib import Path
 
 # ─────────────────────────────────────────────
-# PAGE CONFIG
+# PAGE CONFIG  (must be first Streamlit call)
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="Video Metadata Hub",
+    page_title="VidMeta AI",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -28,49 +28,46 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-section[data-testid="stSidebar"] { min-width: 320px; max-width: 360px; }
-.platform-chip {
-    display: inline-block; padding: 2px 10px; border-radius: 20px;
-    font-size: 0.75rem; font-weight: 600; margin: 2px;
-}
 div[data-testid="stTextArea"] textarea { font-size: 0.88rem; }
-.st-emotion-cache-1kyxreq { gap: 0.5rem; }
+div[data-testid="stTextInput"] input   { font-size: 0.88rem; }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
-# SIDEBAR — LLM + VIDEO SETTINGS
+# SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.image("https://img.shields.io/badge/Video_Metadata_Hub-v1.0-blue?style=for-the-badge", use_container_width=True)
+    st.markdown("### 🎬 VidMeta AI `v1.0`")
+    st.caption("Video → AI analysis → Platform metadata")
+    st.divider()
 
-    st.header("🤖 LLM Provider")
+    st.markdown("#### LLM Provider")
     provider = st.selectbox(
-        "Select provider",
+        "provider",
         [
-            "🏠 Ollama — Local / Free",
-            "🌐 OpenRouter — Free tier",
-            "🔷 OpenAI",
-            "🟠 Anthropic",
-            "💎 Google Gemini",
+            "Ollama — Local / Free",
+            "OpenRouter — Free tier",
+            "OpenAI",
+            "Anthropic",
+            "Google Gemini",
         ],
         label_visibility="collapsed",
     )
 
-    api_key     = ""
-    model       = ""
-    ollama_url  = "http://localhost:11434"
-    api_base    = ""
+    api_key    = ""
+    model      = ""
+    ollama_url = "http://localhost:11434"
+    api_base   = ""
 
-    if "Ollama" in provider:
-        st.info("💡 Requires Ollama running locally with a vision model")
-        ollama_url = st.text_input("Ollama base URL", value="http://localhost:11434")
-        model      = st.text_input("Vision model name", value="llava",
-                                   help="e.g. llava, bakllava, llava-llama3, moondream")
-        st.markdown("[📥 Get Ollama](https://ollama.com/) · [Vision models](https://ollama.com/search?c=vision)")
+    if provider == "Ollama — Local / Free":
+        st.info("Requires Ollama running locally with a vision model.")
+        ollama_url = st.text_input("Ollama URL", value="http://localhost:11434")
+        model      = st.text_input("Model name", value="llava",
+                                   help="e.g. llava · bakllava · llava-llama3 · moondream")
+        st.caption("→ [Get Ollama](https://ollama.com/)  |  [Vision models](https://ollama.com/search?c=vision)")
 
-    elif "OpenRouter" in provider:
+    elif provider == "OpenRouter — Free tier":
         api_key  = st.text_input("OpenRouter API Key", type="password")
         api_base = "https://openrouter.ai/api/v1"
         model    = st.selectbox("Model", [
@@ -79,68 +76,71 @@ with st.sidebar:
             "google/gemma-3-27b-it:free",
             "mistralai/mistral-small-3.1-24b-instruct:free",
         ])
-        st.markdown("[🔑 Get free key](https://openrouter.ai/)")
+        st.caption("→ [Get free key](https://openrouter.ai/)")
 
-    elif "OpenAI" in provider:
+    elif provider == "OpenAI":
         api_key  = st.text_input("OpenAI API Key", type="password")
         api_base = "https://api.openai.com/v1"
         model    = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"])
-        st.markdown("[🔑 Get key](https://platform.openai.com/api-keys)")
+        st.caption("→ [Get key](https://platform.openai.com/api-keys)")
 
-    elif "Anthropic" in provider:
+    elif provider == "Anthropic":
         api_key = st.text_input("Anthropic API Key", type="password")
         model   = st.selectbox("Model", [
             "claude-opus-4-6",
             "claude-sonnet-4-6",
             "claude-haiku-4-5-20251001",
         ])
-        st.markdown("[🔑 Get key](https://console.anthropic.com/)")
+        st.caption("→ [Get key](https://console.anthropic.com/)")
 
-    elif "Gemini" in provider:
+    elif provider == "Google Gemini":
         api_key = st.text_input("Gemini API Key", type="password")
         model   = st.selectbox("Model", [
             "gemini-2.0-flash",
             "gemini-1.5-pro",
             "gemini-1.5-flash",
         ])
-        st.markdown("[🔑 Get key](https://aistudio.google.com/apikey)")
+        st.caption("→ [Get key](https://aistudio.google.com/apikey)")
 
     st.divider()
-    st.header("🎬 Video Processing")
 
-    use_whisper = st.toggle("Enable audio transcription (Whisper)", value=True)
+    st.markdown("#### Video Processing")
+    use_whisper = st.toggle("Transcribe audio (Whisper)", value=True)
+    whisper_model_size = "base"
     if use_whisper:
-        whisper_model_size = st.selectbox(
-            "Whisper model", ["tiny", "base", "small", "medium"],
-            index=1, help="Bigger = more accurate, slower"
+        whisper_model_size = st.select_slider(
+            "Whisper accuracy",
+            options=["tiny", "base", "small", "medium"],
+            value="base",
         )
-    else:
-        whisper_model_size = "base"
 
-    frame_interval = st.slider("Extract 1 frame every (seconds)", 2, 30, 5)
-    max_frames     = st.slider("Max frames to send to LLM", 3, 12, 6)
+    frame_interval = st.slider("Frame every N seconds", 2, 30, 5)
+    max_frames     = st.slider("Max frames to LLM",     3, 12,  6)
 
     st.divider()
-    st.header("🏷️ Brand Context")
+
+    st.markdown("#### Brand Context")
     brand_name      = st.text_input("Brand name",       value="Starkids India")
     brand_niche     = st.text_input("Niche",            value="Kids fashion & clothing, India")
     target_audience = st.text_input("Target audience",  value="Mothers, parents, India")
-    brand_tone      = st.selectbox("Brand tone", ["Fun & playful", "Warm & friendly", "Professional", "Exciting"])
+    brand_tone      = st.select_slider(
+        "Tone",
+        options=["Fun & playful", "Warm & friendly", "Professional", "Exciting"],
+        value="Fun & playful",
+    )
 
 
 # ─────────────────────────────────────────────
-# VIDEO PROCESSING FUNCTIONS
+# VIDEO HELPERS
 # ─────────────────────────────────────────────
 
-def extract_frames(video_path: str, interval_sec: int, max_f: int) -> list[str]:
-    """Extract frames from a video and return as base64 JPEG list."""
-    cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+def extract_frames(video_path, interval_sec, max_f):
+    cap      = cv2.VideoCapture(video_path)
+    fps      = cap.get(cv2.CAP_PROP_FPS) or 25
+    total    = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = total / fps
 
-    positions = []
-    t = 0.0
+    positions, t = [], 0.0
     while t < duration and len(positions) < max_f:
         positions.append(int(t * fps))
         t += interval_sec
@@ -153,8 +153,7 @@ def extract_frames(video_path: str, interval_sec: int, max_f: int) -> list[str]:
             continue
         h, w = frame.shape[:2]
         if w > 800:
-            scale = 800 / w
-            frame = cv2.resize(frame, (800, int(h * scale)))
+            frame = cv2.resize(frame, (800, int(h * 800 / w)))
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
         frames.append(base64.b64encode(buf).decode())
 
@@ -162,8 +161,7 @@ def extract_frames(video_path: str, interval_sec: int, max_f: int) -> list[str]:
     return frames
 
 
-def transcribe_audio(video_path: str, wmodel: str) -> str:
-    """Transcribe audio track using Whisper (faster-whisper preferred)."""
+def transcribe_audio(video_path, wmodel):
     audio_path = video_path + "_audio.wav"
     try:
         subprocess.run(
@@ -171,21 +169,16 @@ def transcribe_audio(video_path: str, wmodel: str) -> str:
             capture_output=True, timeout=120,
         )
         if not os.path.exists(audio_path):
-            return "[No audio track found]"
-
+            return "[No audio track]"
         try:
             from faster_whisper import WhisperModel
             m = WhisperModel(wmodel, device="cpu", compute_type="int8")
             segs, _ = m.transcribe(audio_path, beam_size=3)
-            return " ".join(s.text for s in segs).strip() or "[Silent audio]"
+            return " ".join(s.text for s in segs).strip() or "[Silent]"
         except ImportError:
-            pass
-
-        import whisper
-        m = whisper.load_model(wmodel)
-        result = m.transcribe(audio_path)
-        return result["text"].strip() or "[Silent audio]"
-
+            import whisper
+            m = whisper.load_model(wmodel)
+            return m.transcribe(audio_path)["text"].strip() or "[Silent]"
     except FileNotFoundError:
         return "[ffmpeg not installed — audio skipped]"
     except Exception as e:
@@ -196,10 +189,10 @@ def transcribe_audio(video_path: str, wmodel: str) -> str:
 
 
 # ─────────────────────────────────────────────
-# LLM CALL FUNCTIONS
+# LLM HELPERS
 # ─────────────────────────────────────────────
 
-def _call_ollama(frames: list[str], prompt: str, url: str, mdl: str) -> str:
+def _call_ollama(frames, prompt, url, mdl):
     import requests
     r = requests.post(
         f"{url}/api/generate",
@@ -210,13 +203,10 @@ def _call_ollama(frames: list[str], prompt: str, url: str, mdl: str) -> str:
     return r.json().get("response", "")
 
 
-def _call_openai_compat(frames: list[str], prompt: str, key: str, mdl: str, base: str) -> str:
+def _call_openai_compat(frames, prompt, key, mdl, base):
     from openai import OpenAI
-    client = OpenAI(api_key=key, base_url=base)
-    content: list = [
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f}"}}
-        for f in frames[:6]
-    ]
+    client  = OpenAI(api_key=key, base_url=base)
+    content = [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f}"}} for f in frames[:6]]
     content.append({"type": "text", "text": prompt})
     resp = client.chat.completions.create(
         model=mdl, messages=[{"role": "user", "content": content}], max_tokens=2000
@@ -224,48 +214,33 @@ def _call_openai_compat(frames: list[str], prompt: str, key: str, mdl: str, base
     return resp.choices[0].message.content
 
 
-def _call_anthropic(frames: list[str], prompt: str, key: str, mdl: str) -> str:
+def _call_anthropic(frames, prompt, key, mdl):
     import anthropic as ant
-    client = ant.Anthropic(api_key=key)
-    content: list = [
-        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": f}}
-        for f in frames[:5]
-    ]
+    client  = ant.Anthropic(api_key=key)
+    content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": f}} for f in frames[:5]]
     content.append({"type": "text", "text": prompt})
-    resp = client.messages.create(
-        model=mdl, max_tokens=2000, messages=[{"role": "user", "content": content}]
-    )
+    resp = client.messages.create(model=mdl, max_tokens=2000, messages=[{"role": "user", "content": content}])
     return resp.content[0].text
 
 
-def _call_gemini(frames: list[str], prompt: str, key: str, mdl: str) -> str:
+def _call_gemini(frames, prompt, key, mdl):
     import google.generativeai as genai
     from PIL import Image
     import io as bio
     genai.configure(api_key=key)
-    gm = genai.GenerativeModel(mdl)
-    parts = []
-    for f in frames[:5]:
-        img = Image.open(bio.BytesIO(base64.b64decode(f)))
-        parts.append(img)
+    parts = [Image.open(bio.BytesIO(base64.b64decode(f))) for f in frames[:5]]
     parts.append(prompt)
-    return gm.generate_content(parts).text
+    return genai.GenerativeModel(mdl).generate_content(parts).text
 
 
-def call_llm(frames: list[str], prompt: str) -> str:
-    """Route to the correct LLM based on sidebar settings."""
-    prov = provider
+def call_llm(frames, prompt):
     try:
-        if "Ollama" in prov:
-            return _call_ollama(frames, prompt, ollama_url, model)
-        elif "OpenRouter" in prov or "OpenAI" in prov:
-            return _call_openai_compat(frames, prompt, api_key, model, api_base)
-        elif "Anthropic" in prov:
-            return _call_anthropic(frames, prompt, api_key, model)
-        elif "Gemini" in prov:
-            return _call_gemini(frames, prompt, api_key, model)
+        if   provider == "Ollama — Local / Free":            return _call_ollama(frames, prompt, ollama_url, model)
+        elif provider in ("OpenRouter — Free tier","OpenAI"): return _call_openai_compat(frames, prompt, api_key, model, api_base)
+        elif provider == "Anthropic":                        return _call_anthropic(frames, prompt, api_key, model)
+        elif provider == "Google Gemini":                    return _call_gemini(frames, prompt, api_key, model)
     except Exception as e:
-        raise RuntimeError(f"LLM call failed: {e}") from e
+        raise RuntimeError(f"LLM error ({provider}): {e}") from e
     return ""
 
 
@@ -283,68 +258,67 @@ Tone: {tone}
 Audio Transcript:
 {transcript}
 
-Analyze the video frames provided and give a detailed report covering:
-1. Main subject and core message of the video
-2. Visual elements (products shown, colors, setting, people, style, mood)
-3. Audio/speech summary (what was said, key points)
-4. Content category (tutorial, showcase, lifestyle, behind-the-scenes, etc.)
-5. Unique selling points or highlights visible
-6. Audience fit and emotional appeal
-7. Suggested content angles for social media
+Analyze the video frames and describe:
+1. Main subject and core message
+2. Visual elements — products, colors, setting, people, style
+3. Audio/speech summary
+4. Content category (tutorial, showcase, lifestyle, BTS, etc.)
+5. Unique selling points visible
+6. Emotional appeal and audience fit
+7. Suggested social media angles
 
-Be specific and thorough — this analysis will be used to generate all social metadata."""
+Be specific. This drives all metadata generation."""
 
-
-METADATA_PROMPT = """Based on the video analysis below, generate optimized social media metadata.
+METADATA_PROMPT = """Generate optimized social media metadata from this video analysis.
 
 VIDEO ANALYSIS:
 {analysis}
 
 Brand: {brand_name} | Niche: {brand_niche} | Audience: {target_audience} | Tone: {tone}
 
-Return ONLY valid JSON. No markdown fences. No extra text. Follow this exact structure:
+Return ONLY valid JSON — no markdown, no backticks, no extra text:
 {{
-  "video_summary": "2-3 sentence summary of the video",
+  "video_summary": "2-3 sentence summary",
   "content_category": "e.g. Product Showcase",
   "youtube": {{
-    "title": "SEO title with keyword, under 60 chars visible",
-    "description": "Full 300-400 word description. First 2 lines must hook. Include timestamps if logical. End with strong CTA. Add relevant links section placeholder.",
+    "title": "SEO title with keyword, under 60 chars",
+    "description": "300-400 word description. Hook in first 2 lines. Timestamps if logical. Strong CTA at end.",
     "hashtags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10"],
     "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8","kw9","kw10","kw11","kw12","kw13","kw14","kw15"],
     "cta": "Subscribe CTA text",
-    "posting_tip": "Best time + frequency for YouTube India"
+    "posting_tip": "Best posting time for YouTube India"
   }},
   "instagram": {{
-    "title": "First hook line for caption",
-    "description": "150-200 word caption. Storytelling tone. Engaging. Use line breaks. End with question or CTA.",
+    "title": "Hook line for caption opening",
+    "description": "150-200 word caption. Storytelling. Line breaks. End with question or CTA.",
     "hashtags": ["#h1","#h2","#h3","#h4","#h5","#h6","#h7","#h8","#h9","#h10","#h11","#h12","#h13","#h14","#h15","#h16","#h17","#h18","#h19","#h20","#h21","#h22","#h23","#h24","#h25","#h26","#h27","#h28","#h29","#h30"],
     "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8","kw9","kw10"],
-    "cta": "Follow CTA + link in bio text",
-    "posting_tip": "Best time + days for Instagram India"
+    "cta": "Follow + link in bio CTA",
+    "posting_tip": "Best posting time for Instagram India"
   }},
   "facebook": {{
     "title": "Facebook post heading",
-    "description": "100-150 word post. Conversational. Tag suggestions where applicable.",
+    "description": "100-150 word conversational post.",
     "hashtags": ["#h1","#h2","#h3","#h4","#h5"],
     "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8"],
-    "cta": "Like/Share CTA",
-    "posting_tip": "Best time for Facebook India"
+    "cta": "Like/Share/Comment CTA",
+    "posting_tip": "Best posting time for Facebook India"
   }},
   "tiktok": {{
-    "title": "Punchy hook caption under 100 chars for TikTok",
-    "description": "Short caption under 150 words, fun, trending, relatable",
+    "title": "Punchy TikTok hook under 100 chars",
+    "description": "Short fun caption under 100 words.",
     "hashtags": ["#h1","#h2","#h3","#h4","#h5","#h6","#h7","#h8","#h9","#h10","#h11","#h12","#h13","#h14","#h15"],
     "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8"],
     "cta": "Follow for more CTA",
-    "posting_tip": "Best time for TikTok India"
+    "posting_tip": "Best posting time for TikTok India"
   }},
   "linkedin": {{
-    "title": "Professional headline for LinkedIn",
-    "description": "200-250 word post. Brand story angle. Entrepreneur perspective. Professional yet warm.",
+    "title": "Professional LinkedIn headline",
+    "description": "200-250 word post. Brand story angle. Entrepreneur perspective.",
     "hashtags": ["#h1","#h2","#h3","#h4","#h5","#h6","#h7"],
     "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8"],
     "cta": "Connect/Follow CTA",
-    "posting_tip": "Best time for LinkedIn"
+    "posting_tip": "Best posting time for LinkedIn"
   }}
 }}"""
 
@@ -353,172 +327,279 @@ Return ONLY valid JSON. No markdown fences. No extra text. Follow this exact str
 # MAIN UI
 # ─────────────────────────────────────────────
 
-st.title("🎬 Video Metadata Hub")
-st.caption("Drop a video → AI watches it → Get upload-ready metadata for every platform")
+st.markdown("# 🎬 VidMeta AI")
+st.markdown("Drop a video → AI watches it → Get upload-ready metadata for every platform")
 
-# ── Platform badges
-cols = st.columns(5)
-badges = [
-    ("YouTube",   "#FF0000"),
-    ("Facebook",  "#1877F2"),
-    ("Instagram", "#E1306C"),
-    ("TikTok",    "#010101"),
-    ("LinkedIn",  "#0A66C2"),
-]
-for col, (name, color) in zip(cols, badges):
-    col.markdown(
-        f'<div class="platform-chip" style="background:{color};color:white">{name}</div>',
-        unsafe_allow_html=True,
-    )
+c1, c2, c3, c4, c5, _ = st.columns([1, 1, 1, 1, 1, 3])
+c1.markdown("🔴 **YouTube**")
+c2.markdown("🔵 **Facebook**")
+c3.markdown("🟣 **Instagram**")
+c4.markdown("⚫ **TikTok**")
+c5.markdown("🔷 **LinkedIn**")
 
 st.divider()
 
-# ── Video input
-tab_upload, tab_path = st.tabs(["📂 Upload file", "📁 Local file path"])
+mode_single, mode_batch = st.tabs(["Single Video", "Batch — Folder"])
 
+# ── Single video tab
 video_file_path = None
 uploaded_file   = None
+analyze_btn     = False
+batch_btn       = False
+batch_folder    = None
 
-with tab_upload:
-    uploaded_file = st.file_uploader(
-        "Drag & drop your video",
-        type=["mp4", "mov", "avi", "mkv", "webm", "m4v"],
-        help="Upload directly from your machine",
+with mode_single:
+    st.markdown("#### Video Input")
+    input_mode = st.radio(
+        "Input mode",
+        ["Upload file", "Local file path"],
+        horizontal=True,
+        label_visibility="collapsed",
     )
-    if uploaded_file:
-        st.video(uploaded_file)
 
-with tab_path:
-    path_input = st.text_input(
-        "Full path to video file",
-        placeholder="/Users/deepak/Videos/starkids_summer_collection.mp4",
-        help="Paste the complete file path. Best for large files.",
+    if input_mode == "Upload file":
+        uploaded_file = st.file_uploader(
+            "Drag & drop your video here",
+            type=["mp4", "mov", "avi", "mkv", "webm", "m4v"],
+        )
+        if uploaded_file:
+            st.video(uploaded_file)
+    else:
+        path_input = st.text_input(
+            "Full path to video",
+            placeholder="/Users/deepak/Videos/starkids_video.mp4",
+        )
+        if path_input:
+            if os.path.exists(path_input):
+                size_mb = os.path.getsize(path_input) / 1e6
+                st.success(f"Found: **{Path(path_input).name}** — {size_mb:.1f} MB")
+                st.video(path_input)
+                video_file_path = path_input
+            else:
+                st.error("File not found at that path.")
+
+    st.divider()
+    col_btn, col_tip = st.columns([1, 4])
+    with col_btn:
+        analyze_btn = st.button("Analyze & Generate", type="primary", use_container_width=True)
+    with col_tip:
+        st.caption("Extracts frames → Transcribes audio → LLM analysis → Metadata for all 5 platforms")
+
+
+# ── Batch tab
+with mode_batch:
+    st.markdown("#### Folder Path")
+    batch_folder_input = st.text_input(
+        "Folder path",
+        placeholder="/Users/deepak/Videos/starkids/",
+        label_visibility="collapsed",
     )
-    if path_input and os.path.exists(path_input):
-        st.success(f"✅ File found: {Path(path_input).name}  ({os.path.getsize(path_input) / 1e6:.1f} MB)")
-        st.video(path_input)
-        video_file_path = path_input
-    elif path_input:
-        st.error("❌ File not found at that path")
 
-# ── Analyze button
-st.divider()
-col_btn, col_info = st.columns([1, 3])
-with col_btn:
-    analyze_btn = st.button("🔍 Analyze & Generate", type="primary", use_container_width=True)
-with col_info:
-    st.caption("Steps: Extract frames → Transcribe audio → LLM analysis → Generate metadata for all 5 platforms")
+    VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+
+    if batch_folder_input:
+        bp = Path(batch_folder_input)
+        if bp.exists() and bp.is_dir():
+            found = sorted([f for f in bp.iterdir() if f.suffix.lower() in VIDEO_EXTS])
+            if found:
+                st.success(f"Found **{len(found)} video(s)** in folder")
+                with st.expander("Video list"):
+                    for i, f in enumerate(found, 1):
+                        size_mb = f.stat().st_size / 1e6
+                        st.caption(f"{i}. {f.name}  —  {size_mb:.1f} MB")
+                batch_folder = bp
+            else:
+                st.warning("No video files found in that folder.")
+        elif batch_folder_input:
+            st.error("Folder not found.")
+
+    st.divider()
+    col_bb, col_bt = st.columns([1, 4])
+    with col_bb:
+        batch_btn = st.button("Process All Videos", type="primary", use_container_width=True)
+    with col_bt:
+        st.caption("Each video is analyzed in sequence. Results export as a single combined file.")
+
 
 # ─────────────────────────────────────────────
-# ANALYSIS PIPELINE
+# PIPELINE
 # ─────────────────────────────────────────────
 
 if analyze_btn:
-    # Validate
     if not uploaded_file and not video_file_path:
-        st.error("Please upload a video or provide a file path first.")
+        st.error("Please provide a video file.")
         st.stop()
-
-    # Validate provider setup
-    if "Ollama" not in provider and not api_key:
-        st.error("Please enter an API key in the sidebar.")
+    if provider != "Ollama — Local / Free" and not api_key:
+        st.error("Please enter your API key in the sidebar.")
         st.stop()
     if not model:
-        st.error("Please select or enter a model name.")
+        st.error("Please enter or select a model name.")
         st.stop()
 
-    # Save uploaded file to temp if needed
     if uploaded_file:
         suffix = Path(uploaded_file.name).suffix
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp    = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp.write(uploaded_file.read())
         tmp.close()
         actual_path = tmp.name
     else:
         actual_path = video_file_path
 
-    # ── Pipeline with status box
     progress = st.progress(0, text="Starting…")
-    with st.status("🎬 Processing video…", expanded=True) as status_box:
 
-        # STEP 1 — Extract frames
-        st.write("📸 Extracting video frames…")
+    with st.status("Processing your video…", expanded=True) as status_box:
+
+        st.write("Extracting frames…")
         try:
             frames = extract_frames(actual_path, frame_interval, max_frames)
         except Exception as e:
             st.error(f"Frame extraction failed: {e}")
             st.stop()
-        progress.progress(20, text=f"Extracted {len(frames)} frames")
-        st.write(f"✅ {len(frames)} frames extracted")
+        progress.progress(20, text=f"{len(frames)} frames extracted")
+        st.write(f"{len(frames)} frames ready")
 
-        # STEP 2 — Transcribe audio
         transcript = ""
         if use_whisper:
-            st.write("🎙️ Transcribing audio with Whisper…")
+            st.write("Transcribing audio…")
             transcript = transcribe_audio(actual_path, whisper_model_size)
             progress.progress(45, text="Audio transcribed")
-            preview = transcript[:120] + "…" if len(transcript) > 120 else transcript
-            st.write(f"✅ Transcript: _{preview}_")
+            preview = (transcript[:100] + "…") if len(transcript) > 100 else transcript
+            st.write(f"Transcript: _{preview}_")
         else:
-            st.write("⏭️ Audio transcription skipped")
-            progress.progress(45)
+            progress.progress(45, text="Audio skipped")
 
-        # STEP 3 — LLM video analysis
-        st.write(f"🤖 Sending to {provider.split('—')[0].strip()}…")
+        st.write(f"Analyzing with {provider}…")
         analysis_prompt = ANALYSIS_PROMPT.format(
-            brand_name=brand_name,
-            brand_niche=brand_niche,
-            target_audience=target_audience,
-            tone=brand_tone,
-            transcript=transcript if transcript else "No transcript available",
+            brand_name=brand_name, brand_niche=brand_niche,
+            target_audience=target_audience, tone=brand_tone,
+            transcript=transcript or "No transcript available",
         )
         try:
             analysis = call_llm(frames, analysis_prompt)
         except RuntimeError as e:
-            st.error(str(e))
-            st.stop()
+            st.error(str(e)); st.stop()
         progress.progress(70, text="Video analyzed")
-        st.write("✅ Video analysis complete")
+        st.write("Video analysis complete")
 
-        # STEP 4 — Generate metadata
-        st.write("📋 Generating metadata for all platforms…")
+        st.write("Generating metadata for all platforms…")
         metadata_prompt = METADATA_PROMPT.format(
-            analysis=analysis,
-            brand_name=brand_name,
-            brand_niche=brand_niche,
-            target_audience=target_audience,
-            tone=brand_tone,
+            analysis=analysis, brand_name=brand_name, brand_niche=brand_niche,
+            target_audience=target_audience, tone=brand_tone,
         )
         try:
-            meta_raw = call_llm([], metadata_prompt)  # text-only call
+            meta_raw = call_llm([], metadata_prompt)
         except RuntimeError as e:
-            st.error(str(e))
-            st.stop()
+            st.error(str(e)); st.stop()
 
-        # Parse JSON
         try:
-            clean = meta_raw.replace("```json", "").replace("```", "").strip()
+            clean    = meta_raw.replace("```json", "").replace("```", "").strip()
             metadata = json.loads(clean)
         except json.JSONDecodeError:
-            st.warning("⚠️ LLM returned non-JSON. Showing raw output.")
+            st.warning("LLM returned non-JSON — showing raw.")
             metadata = {"raw": meta_raw}
 
         progress.progress(100, text="Done!")
-        st.write("✅ Metadata generated for all 5 platforms!")
-        status_box.update(label="✅ Analysis complete!", state="complete")
+        st.write("All metadata generated!")
+        status_box.update(label="Analysis complete!", state="complete")
 
-    # Store results
     st.session_state["metadata"]   = metadata
     st.session_state["analysis"]   = analysis
     st.session_state["transcript"] = transcript
 
-    # Cleanup temp file
     if uploaded_file and os.path.exists(actual_path):
         os.remove(actual_path)
 
 
 # ─────────────────────────────────────────────
-# RESULTS DISPLAY
+# BATCH PIPELINE
+# ─────────────────────────────────────────────
+
+if batch_btn:
+    if not batch_folder:
+        st.error("Please enter a valid folder path.")
+        st.stop()
+    if provider != "Ollama — Local / Free" and not api_key:
+        st.error("Please enter your API key in the sidebar.")
+        st.stop()
+    if not model:
+        st.error("Please enter or select a model name.")
+        st.stop()
+
+    VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+    video_files = sorted([f for f in batch_folder.iterdir() if f.suffix.lower() in VIDEO_EXTS])
+
+    if not video_files:
+        st.error("No video files found in that folder.")
+        st.stop()
+
+    st.divider()
+    st.markdown(f"### Processing {len(video_files)} videos")
+
+    batch_results = []
+    overall = st.progress(0, text="Starting batch…")
+
+    for idx, vfile in enumerate(video_files):
+        st.markdown(f"---\n**[{idx+1}/{len(video_files)}] {vfile.name}**")
+
+        with st.status(f"Processing {vfile.name}…", expanded=False) as vstatus:
+
+            # Frames
+            st.write("Extracting frames…")
+            try:
+                frames = extract_frames(str(vfile), frame_interval, max_frames)
+            except Exception as e:
+                st.error(f"Frame extraction failed: {e}")
+                batch_results.append({"file": vfile.name, "error": str(e)})
+                continue
+            st.write(f"{len(frames)} frames extracted")
+
+            # Audio
+            transcript = ""
+            if use_whisper:
+                st.write("Transcribing audio…")
+                transcript = transcribe_audio(str(vfile), whisper_model_size)
+                st.write("Audio transcribed")
+
+            # Analysis
+            st.write("Analyzing video…")
+            try:
+                analysis = call_llm(frames, ANALYSIS_PROMPT.format(
+                    brand_name=brand_name, brand_niche=brand_niche,
+                    target_audience=target_audience, tone=brand_tone,
+                    transcript=transcript or "No transcript available",
+                ))
+            except RuntimeError as e:
+                st.error(str(e))
+                batch_results.append({"file": vfile.name, "error": str(e)})
+                continue
+
+            # Metadata
+            st.write("Generating metadata…")
+            try:
+                meta_raw = call_llm([], METADATA_PROMPT.format(
+                    analysis=analysis, brand_name=brand_name, brand_niche=brand_niche,
+                    target_audience=target_audience, tone=brand_tone,
+                ))
+                clean    = meta_raw.replace("```json", "").replace("```", "").strip()
+                metadata = json.loads(clean)
+            except Exception as e:
+                st.warning(f"Metadata parse error: {e}")
+                metadata = {"raw": meta_raw if 'meta_raw' in dir() else str(e)}
+
+            batch_results.append({"file": vfile.name, "metadata": metadata})
+            vstatus.update(label=f"Done — {vfile.name}", state="complete")
+
+        overall.progress(
+            int((idx + 1) / len(video_files) * 100),
+            text=f"Completed {idx+1} of {len(video_files)}",
+        )
+
+    st.session_state["batch_results"] = batch_results
+    st.success(f"Batch complete — {len([r for r in batch_results if 'metadata' in r])} of {len(video_files)} videos processed successfully.")
+
+
+# ─────────────────────────────────────────────
+# RESULTS
 # ─────────────────────────────────────────────
 
 if "metadata" in st.session_state:
@@ -528,170 +609,114 @@ if "metadata" in st.session_state:
 
     st.divider()
 
-    # Summary cards
-    if "video_summary" in md:
-        st.info(f"📝 **Video Summary:** {md['video_summary']}")
-    if "content_category" in md:
+    if md.get("video_summary"):
+        st.info(md['video_summary'])
+    if md.get("content_category"):
         st.caption(f"Category: `{md['content_category']}`")
 
-    # Expandable: raw outputs
-    with st.expander("🔍 Raw video analysis (LLM output)"):
+    with st.expander("Raw video analysis"):
         st.write(anlz)
     if trx:
-        with st.expander("🎙️ Audio transcript"):
+        with st.expander("Audio transcript"):
             st.write(trx)
 
-    st.subheader("📦 Platform Metadata")
+    st.markdown("### Platform Metadata")
 
-    PLATFORM_CONFIG = {
-        "youtube":   ("🔴 YouTube",   "#FF0000"),
-        "facebook":  ("🔵 Facebook",  "#1877F2"),
-        "instagram": ("📸 Instagram", "#E1306C"),
-        "tiktok":    ("🎵 TikTok",    "#010101"),
-        "linkedin":  ("💼 LinkedIn",  "#0A66C2"),
+    PLATFORMS = {
+        "youtube":   "YouTube",
+        "facebook":  "Facebook",
+        "instagram": "Instagram",
+        "tiktok":    "TikTok",
+        "linkedin":  "LinkedIn",
     }
 
-    tab_labels = [v[0] for v in PLATFORM_CONFIG.values()]
-    tabs = st.tabs(tab_labels)
+    tabs = st.tabs(list(PLATFORMS.values()))
 
-    for tab, (pkey, (plabel, pcolor)) in zip(tabs, PLATFORM_CONFIG.items()):
+    for tab, (pkey, plabel) in zip(tabs, PLATFORMS.items()):
         with tab:
             pdata = md.get(pkey)
             if not pdata or not isinstance(pdata, dict):
-                st.warning("No data generated for this platform.")
+                st.warning("No data for this platform.")
                 continue
 
-            col_left, col_right = st.columns([3, 2])
+            col_l, col_r = st.columns([3, 2])
 
-            with col_left:
-                # Title
+            with col_l:
                 title_val = pdata.get("title", "")
-                st.text_input(
-                    f"Title ({len(title_val)} chars)",
-                    value=title_val,
-                    key=f"title_{pkey}",
-                )
-
-                # Description
+                st.text_input(f"Title — {len(title_val)} chars", value=title_val, key=f"t_{pkey}")
                 desc_val = pdata.get("description", "")
-                st.text_area(
-                    f"Description ({len(desc_val)} chars)",
-                    value=desc_val,
-                    height=220,
-                    key=f"desc_{pkey}",
-                )
-
-                # CTA
+                st.text_area(f"Description — {len(desc_val)} chars", value=desc_val, height=220, key=f"d_{pkey}")
                 if pdata.get("cta"):
                     st.text_input("Call to Action", value=pdata["cta"], key=f"cta_{pkey}")
 
-            with col_right:
-                # Hashtags
+            with col_r:
                 tags = pdata.get("hashtags", [])
                 tags_str = "\n".join(tags) if isinstance(tags, list) else tags
                 st.text_area(
-                    f"Hashtags ({len(tags) if isinstance(tags, list) else '—'})",
-                    value=tags_str,
-                    height=160,
-                    key=f"tags_{pkey}",
+                    f"Hashtags — {len(tags) if isinstance(tags, list) else '?'}",
+                    value=tags_str, height=160, key=f"h_{pkey}",
                 )
-
-                # Keywords
                 kws = pdata.get("keywords", [])
-                kws_str = ", ".join(kws) if isinstance(kws, list) else kws
                 st.text_area(
                     "SEO Keywords",
-                    value=kws_str,
-                    height=90,
-                    key=f"kw_{pkey}",
+                    value=", ".join(kws) if isinstance(kws, list) else kws,
+                    height=90, key=f"k_{pkey}",
                 )
-
-                # Posting tip
                 if pdata.get("posting_tip"):
-                    st.success(f"⏰ {pdata['posting_tip']}")
+                    st.success(pdata['posting_tip'])
 
-            # Quick-copy row
-            st.caption("Quick copy:")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.download_button(
-                    "⬇️ Title",
-                    data=pdata.get("title", ""),
-                    file_name=f"{pkey}_title.txt",
-                    mime="text/plain",
-                    key=f"dl_title_{pkey}",
-                )
-            with c2:
-                st.download_button(
-                    "⬇️ Description",
-                    data=pdata.get("description", ""),
-                    file_name=f"{pkey}_description.txt",
-                    mime="text/plain",
-                    key=f"dl_desc_{pkey}",
-                )
-            with c3:
-                tags_dl = "\n".join(tags) if isinstance(tags, list) else tags
-                st.download_button(
-                    "⬇️ Hashtags",
-                    data=tags_dl,
-                    file_name=f"{pkey}_hashtags.txt",
-                    mime="text/plain",
-                    key=f"dl_tags_{pkey}",
-                )
+            st.caption("Download fields:")
+            dc1, dc2, dc3, dc4 = st.columns(4)
+            with dc1:
+                st.download_button("Title",       data=pdata.get("title",""),                                       file_name=f"{pkey}_title.txt",    key=f"dl_t_{pkey}")
+            with dc2:
+                st.download_button("Description", data=pdata.get("description",""),                                 file_name=f"{pkey}_desc.txt",     key=f"dl_d_{pkey}")
+            with dc3:
+                st.download_button("Hashtags",    data="\n".join(tags) if isinstance(tags,list) else tags,          file_name=f"{pkey}_hashtags.txt", key=f"dl_h_{pkey}")
+            with dc4:
+                st.download_button("Keywords",    data=", ".join(kws) if isinstance(kws,list) else kws,             file_name=f"{pkey}_keywords.txt", key=f"dl_k_{pkey}")
 
-    # ── Export section
     st.divider()
-    st.subheader("⬇️ Export all")
+    st.markdown("#### Export All Platforms")
+    e1, e2, e3 = st.columns(3)
 
-    ecol1, ecol2, ecol3 = st.columns(3)
-
-    with ecol1:
+    with e1:
         st.download_button(
-            "📄 Download JSON",
+            "Download JSON", use_container_width=True,
             data=json.dumps(md, indent=2, ensure_ascii=False),
-            file_name="video_metadata.json",
-            mime="application/json",
-            use_container_width=True,
+            file_name="vidmeta_output.json", mime="application/json",
         )
-
-    with ecol2:
-        # Build CSV
-        csv_rows = []
-        for pkey, (plabel, _) in PLATFORM_CONFIG.items():
+    with e2:
+        rows = []
+        for pkey, plabel in PLATFORMS.items():
             pdata = md.get(pkey, {})
             if isinstance(pdata, dict):
                 tags = pdata.get("hashtags", [])
                 kws  = pdata.get("keywords", [])
-                csv_rows.append({
+                rows.append({
                     "Platform":    plabel,
                     "Title":       pdata.get("title", ""),
                     "Description": pdata.get("description", ""),
                     "Hashtags":    " ".join(tags) if isinstance(tags, list) else tags,
                     "Keywords":    ", ".join(kws)  if isinstance(kws,  list) else kws,
                     "CTA":         pdata.get("cta", ""),
-                    "PostingTip":  pdata.get("posting_tip", ""),
+                    "Posting Tip": pdata.get("posting_tip", ""),
                 })
-        out = csv_io.StringIO()
-        if csv_rows:
-            writer = csv.DictWriter(out, fieldnames=csv_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(csv_rows)
+        buf = csv_io.StringIO()
+        if rows:
+            w = csv.DictWriter(buf, fieldnames=rows[0].keys())
+            w.writeheader(); w.writerows(rows)
         st.download_button(
-            "📊 Download CSV",
-            data=out.getvalue(),
-            file_name="video_metadata.csv",
-            mime="text/csv",
-            use_container_width=True,
+            "Download CSV", use_container_width=True,
+            data=buf.getvalue(), file_name="vidmeta_output.csv", mime="text/csv",
         )
-
-    with ecol3:
-        # Plain text pack
-        txt_parts = []
-        for pkey, (plabel, _) in PLATFORM_CONFIG.items():
+    with e3:
+        txt = []
+        for pkey, plabel in PLATFORMS.items():
             pdata = md.get(pkey, {})
             if isinstance(pdata, dict):
                 tags = pdata.get("hashtags", [])
-                txt_parts.append(
+                txt.append(
                     f"{'='*40}\n{plabel}\n{'='*40}\n"
                     f"TITLE:\n{pdata.get('title','')}\n\n"
                     f"DESCRIPTION:\n{pdata.get('description','')}\n\n"
@@ -701,9 +726,95 @@ if "metadata" in st.session_state:
                     f"POSTING TIP: {pdata.get('posting_tip','')}\n\n"
                 )
         st.download_button(
-            "📝 Download TXT",
-            data="\n".join(txt_parts),
-            file_name="video_metadata.txt",
-            mime="text/plain",
+            "Download TXT", use_container_width=True,
+            data="\n".join(txt), file_name="vidmeta_output.txt", mime="text/plain",
+        )
+
+
+# ─────────────────────────────────────────────
+# BATCH RESULTS
+# ─────────────────────────────────────────────
+
+if "batch_results" in st.session_state:
+    results = st.session_state["batch_results"]
+    ok      = [r for r in results if "metadata" in r]
+    failed  = [r for r in results if "error"    in r]
+
+    st.divider()
+    st.markdown("### Batch Results")
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total videos",   len(results))
+    m2.metric("Processed",      len(ok))
+    m3.metric("Failed",         len(failed))
+
+    if failed:
+        with st.expander(f"Failed ({len(failed)})"):
+            for r in failed:
+                st.error(f"{r['file']} — {r['error']}")
+
+    # Per-video expandable results
+    PLATFORMS = {
+        "youtube": "YouTube", "facebook": "Facebook", "instagram": "Instagram",
+        "tiktok": "TikTok",   "linkedin": "LinkedIn",
+    }
+
+    for r in ok:
+        with st.expander(f"{r['file']}"):
+            md = r["metadata"]
+            if md.get("video_summary"):
+                st.info(md["video_summary"])
+            tabs = st.tabs(list(PLATFORMS.values()))
+            for tab, (pkey, plabel) in zip(tabs, PLATFORMS.items()):
+                with tab:
+                    pdata = md.get(pkey, {})
+                    if not isinstance(pdata, dict):
+                        st.caption("No data"); continue
+                    st.text_input("Title",       value=pdata.get("title",""),       key=f"b_t_{r['file']}_{pkey}")
+                    st.text_area("Description",  value=pdata.get("description",""), key=f"b_d_{r['file']}_{pkey}", height=140)
+                    tags = pdata.get("hashtags", [])
+                    st.text_area("Hashtags",     value="\n".join(tags) if isinstance(tags,list) else tags, key=f"b_h_{r['file']}_{pkey}", height=80)
+
+    st.divider()
+    st.markdown("#### Export All Batch Results")
+    be1, be2 = st.columns(2)
+
+    with be1:
+        st.download_button(
+            "Download JSON (all videos)",
+            data=json.dumps(results, indent=2, ensure_ascii=False),
+            file_name="vidmeta_batch.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    with be2:
+        # Flat CSV — one row per platform per video
+        csv_rows = []
+        for r in ok:
+            for pkey, plabel in PLATFORMS.items():
+                pdata = r["metadata"].get(pkey, {})
+                if isinstance(pdata, dict):
+                    tags = pdata.get("hashtags", [])
+                    kws  = pdata.get("keywords",  [])
+                    csv_rows.append({
+                        "File":        r["file"],
+                        "Platform":    plabel,
+                        "Title":       pdata.get("title", ""),
+                        "Description": pdata.get("description", ""),
+                        "Hashtags":    " ".join(tags) if isinstance(tags, list) else tags,
+                        "Keywords":    ", ".join(kws)  if isinstance(kws,  list) else kws,
+                        "CTA":         pdata.get("cta", ""),
+                        "Posting Tip": pdata.get("posting_tip", ""),
+                    })
+        buf = csv_io.StringIO()
+        if csv_rows:
+            w = csv.DictWriter(buf, fieldnames=csv_rows[0].keys())
+            w.writeheader(); w.writerows(csv_rows)
+        st.download_button(
+            "Download CSV (all videos)",
+            data=buf.getvalue(),
+            file_name="vidmeta_batch.csv",
+            mime="text/csv",
             use_container_width=True,
         )
