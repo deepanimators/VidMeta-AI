@@ -1,0 +1,21 @@
+# Video Metadata Hub — Dependencies
+# Install: pip install -r requirements.txt
+
+# ── Core UI
+streamlit>=1.35.0
+
+# ── Video processing
+opencv-python-headless>=4.9.0
+Pillow>=10.0.0
+
+# ── Audio transcription (choose one or both)
+faster-whisper>=1.0.0          # Recommended — faster, lighter
+# openai-whisper>=20231117     # Alternative — uncomment if faster-whisper fails
+
+# ── LLM providers (install only what you use)
+openai>=1.30.0                 # OpenAI + OpenRouter
+anthropic>=0.28.0              # Anthropic Claude
+google-generativeai>=0.7.0     # Google Gemini
+
+# ── Utilities
+requests>=2.31.0               # Ollama HTTP calls
