@@ -1,4 +1,4 @@
-# 🎬 Video Metadata Hub
+# 🎬 VidMeta AI Hub
 
 Analyze local videos with AI → Generate upload-ready metadata for **YouTube, Instagram, Facebook, TikTok, LinkedIn** — all in one shot.
 
