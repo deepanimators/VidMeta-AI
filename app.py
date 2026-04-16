@@ -10,11 +10,13 @@ import cv2
 import base64
 import json
 import os
+import shutil
 import tempfile
 import subprocess
 import csv
 import io as csv_io
 from pathlib import Path
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG  (must be first Streamlit call)
@@ -25,6 +27,43 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+cookies = EncryptedCookieManager(
+    prefix="vidmeta/",
+    password=os.environ.get(
+        "VIDMETA_COOKIE_PASSWORD",
+        os.environ.get("COOKIES_PASSWORD", "vidmeta-local-dev-cookie-password"),
+    ),
+)
+if not cookies.ready():
+    st.stop()
+
+
+def _cookie_text(name, default):
+    value = cookies.get(name)
+    return default if value in (None, "") else str(value)
+
+
+def _cookie_bool(name, default):
+    value = cookies.get(name)
+    if value in (None, ""):
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _cookie_int(name, default):
+    value = cookies.get(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _cookie_choice(name, options, default):
+    value = _cookie_text(name, default)
+    return value if value in options else default
 
 st.markdown("""
 <style>
@@ -43,91 +82,139 @@ with st.sidebar:
     st.divider()
 
     st.markdown("#### LLM Provider")
+    provider_options = [
+        "Ollama — Local / Free",
+        "OpenRouter — Free tier",
+        "OpenAI",
+        "Anthropic",
+        "Google Gemini",
+    ]
     provider = st.selectbox(
         "provider",
-        [
-            "Ollama — Local / Free",
-            "OpenRouter — Free tier",
-            "OpenAI",
-            "Anthropic",
-            "Google Gemini",
-        ],
+        provider_options,
+        index=provider_options.index(
+            _cookie_choice("provider", provider_options, "Ollama — Local / Free")
+        ),
         label_visibility="collapsed",
     )
 
     api_key    = ""
     model      = ""
-    ollama_url = "http://localhost:11434"
+    ollama_url = _cookie_text("ollama_url", "http://localhost:11434")
     api_base   = ""
 
     if provider == "Ollama — Local / Free":
         st.info("Requires Ollama running locally with a vision model.")
-        ollama_url = st.text_input("Ollama URL", value="http://localhost:11434")
-        model      = st.text_input("Model name", value="gemma4",
-                                   help="e.g. gemma4 · bakgemma4 · gemma4-llama3 · moondream")
+        ollama_url = st.text_input("Ollama URL", value=ollama_url)
+        model      = st.text_input(
+            "Model name",
+            value=_cookie_text("ollama_model", "gemma4"),
+            help="e.g. gemma4 · bakgemma4 · gemma4-llama3 · moondream",
+        )
         st.caption("→ [Get Ollama](https://ollama.com/)  |  [Vision models](https://ollama.com/search?c=vision)")
 
     elif provider == "OpenRouter — Free tier":
-        api_key  = st.text_input("OpenRouter API Key", type="password")
+        api_key  = st.text_input("OpenRouter API Key", value=_cookie_text("openrouter_api_key", ""), type="password")
         api_base = "https://openrouter.ai/api/v1"
-        model    = st.selectbox("Model", [
+        openrouter_models = [
             "meta-llama/llama-3.2-11b-vision-instruct:free",
             "qwen/qwen2.5-vl-72b-instruct:free",
             "google/gemma-3-27b-it:free",
             "mistralai/mistral-small-3.1-24b-instruct:free",
-        ])
+        ]
+        model    = st.selectbox(
+            "Model",
+            openrouter_models,
+            index=openrouter_models.index(_cookie_choice("openrouter_model", openrouter_models, openrouter_models[0])),
+        )
         st.caption("→ [Get free key](https://openrouter.ai/)")
 
     elif provider == "OpenAI":
-        api_key  = st.text_input("OpenAI API Key", type="password")
+        api_key  = st.text_input("OpenAI API Key", value=_cookie_text("openai_api_key", ""), type="password")
         api_base = "https://api.openai.com/v1"
-        model    = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"])
-        st.caption("→ [Get key](https://platform.openai.com/api-keys)")
+        openai_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
+        model    = st.selectbox(
+            "Model",
+            openai_models,
+            index=openai_models.index(_cookie_choice("openai_model", openai_models, openai_models[0])),
+        )
+        st.caption("→ [Get OpenAI API key](https://platform.openai.com/api-keys)")
+        st.caption("OpenAI accounts used here must have API billing enabled.")
 
     elif provider == "Anthropic":
-        api_key = st.text_input("Anthropic API Key", type="password")
-        model   = st.selectbox("Model", [
+        api_key = st.text_input("Anthropic API Key", value=_cookie_text("anthropic_api_key", ""), type="password")
+        anthropic_models = [
             "claude-opus-4-6",
             "claude-sonnet-4-6",
             "claude-haiku-4-5-20251001",
-        ])
+        ]
+        model   = st.selectbox(
+            "Model",
+            anthropic_models,
+            index=anthropic_models.index(_cookie_choice("anthropic_model", anthropic_models, anthropic_models[0])),
+        )
         st.caption("→ [Get key](https://console.anthropic.com/)")
 
     elif provider == "Google Gemini":
-        api_key = st.text_input("Gemini API Key", type="password")
-        model   = st.selectbox("Model", [
+        api_key = st.text_input("Gemini API Key", value=_cookie_text("gemini_api_key", ""), type="password")
+        gemini_models = [
             "gemini-2.0-flash",
             "gemini-1.5-pro",
             "gemini-1.5-flash",
-        ])
+        ]
+        model   = st.selectbox(
+            "Model",
+            gemini_models,
+            index=gemini_models.index(_cookie_choice("gemini_model", gemini_models, gemini_models[0])),
+        )
         st.caption("→ [Get key](https://aistudio.google.com/apikey)")
 
     st.divider()
 
     st.markdown("#### Video Processing")
-    use_whisper = st.toggle("Transcribe audio (Whisper)", value=True)
+    use_whisper = st.toggle("Transcribe audio (Whisper)", value=_cookie_bool("use_whisper", True))
     whisper_model_size = "base"
     if use_whisper:
         whisper_model_size = st.select_slider(
             "Whisper accuracy",
             options=["tiny", "base", "small", "medium"],
-            value="base",
+            value=_cookie_choice("whisper_model_size", ["tiny", "base", "small", "medium"], "base"),
         )
 
-    frame_interval = st.slider("Frame every N seconds", 2, 30, 5)
-    max_frames     = st.slider("Max frames to LLM",     3, 12,  6)
+    frame_interval = st.slider("Frame every N seconds", 2, 30, _cookie_int("frame_interval", 5))
+    max_frames     = st.slider("Max frames to LLM",     3, 12,  _cookie_int("max_frames", 6))
 
     st.divider()
 
     st.markdown("#### Brand Context")
-    brand_name      = st.text_input("Brand name",       value="Starkids India")
-    brand_niche     = st.text_input("Niche",            value="Kids fashion & clothing, India")
-    target_audience = st.text_input("Target audience",  value="Mothers, parents, India")
+    brand_name      = st.text_input("Brand name",       value=_cookie_text("brand_name", "Condenast"))
+    brand_niche     = st.text_input("Niche",            value=_cookie_text("brand_niche", "Kids fashion & clothing, India"))
+    target_audience = st.text_input("Target audience",  value=_cookie_text("target_audience", "Mothers, parents, India"))
     brand_tone      = st.select_slider(
         "Tone",
         options=["Fun & playful", "Warm & friendly", "Professional", "Exciting"],
-        value="Fun & playful",
+        value=_cookie_choice("brand_tone", ["Fun & playful", "Warm & friendly", "Professional", "Exciting"], "Fun & playful"),
     )
+
+    cookies["provider"] = provider
+    cookies["ollama_url"] = ollama_url
+    cookies["ollama_model"] = model if provider == "Ollama — Local / Free" else _cookie_text("ollama_model", "gemma4")
+    cookies["openrouter_api_key"] = api_key if provider == "OpenRouter — Free tier" else _cookie_text("openrouter_api_key", "")
+    cookies["openrouter_model"] = model if provider == "OpenRouter — Free tier" else _cookie_text("openrouter_model", "meta-llama/llama-3.2-11b-vision-instruct:free")
+    cookies["openai_api_key"] = api_key if provider == "OpenAI" else _cookie_text("openai_api_key", "")
+    cookies["openai_model"] = model if provider == "OpenAI" else _cookie_text("openai_model", "gpt-4o")
+    cookies["anthropic_api_key"] = api_key if provider == "Anthropic" else _cookie_text("anthropic_api_key", "")
+    cookies["anthropic_model"] = model if provider == "Anthropic" else _cookie_text("anthropic_model", "claude-opus-4-6")
+    cookies["gemini_api_key"] = api_key if provider == "Google Gemini" else _cookie_text("gemini_api_key", "")
+    cookies["gemini_model"] = model if provider == "Google Gemini" else _cookie_text("gemini_model", "gemini-2.0-flash")
+    cookies["use_whisper"] = str(use_whisper)
+    cookies["whisper_model_size"] = whisper_model_size
+    cookies["frame_interval"] = str(frame_interval)
+    cookies["max_frames"] = str(max_frames)
+    cookies["brand_name"] = brand_name
+    cookies["brand_niche"] = brand_niche
+    cookies["target_audience"] = target_audience
+    cookies["brand_tone"] = brand_tone
 
 
 # ─────────────────────────────────────────────
@@ -186,6 +273,19 @@ def transcribe_audio(video_path, wmodel):
     finally:
         if os.path.exists(audio_path):
             os.remove(audio_path)
+
+
+def _save_uploaded_file(uploaded_file):
+    suffix = Path(uploaded_file.name).suffix
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp_path = tmp.name
+    tmp.close()
+
+    uploaded_file.seek(0)
+    with open(tmp_path, "wb") as destination:
+        shutil.copyfileobj(uploaded_file, destination, length=8 * 1024 * 1024)
+
+    return tmp_path
 
 
 # ─────────────────────────────────────────────
@@ -363,7 +463,9 @@ with mode_single:
         ["Upload file", "Local file path"],
         horizontal=True,
         label_visibility="collapsed",
+        index=["Upload file", "Local file path"].index(_cookie_choice("input_mode", ["Upload file", "Local file path"], "Upload file")),
     )
+    cookies["input_mode"] = input_mode
 
     if input_mode == "Upload file":
         uploaded_file = st.file_uploader(
@@ -371,12 +473,19 @@ with mode_single:
             type=["mp4", "mov", "avi", "mkv", "webm", "m4v"],
         )
         if uploaded_file:
-            st.video(uploaded_file)
+            uploaded_size_mb = getattr(uploaded_file, "size", 0) / 1e6
+            st.success(f"Uploaded: **{uploaded_file.name}** — {uploaded_size_mb:.1f} MB")
+            if uploaded_size_mb <= 100:
+                st.video(uploaded_file)
+            else:
+                st.info("Preview disabled for large uploads to keep memory usage lower.")
     else:
         path_input = st.text_input(
             "Full path to video",
-            placeholder="/Users/deepak/Videos/starkids_video.mp4",
+            value=_cookie_text("single_video_path", ""),
+            placeholder="/Users/Condenast/Videos/Condenast_video.mp4",
         )
+        cookies["single_video_path"] = path_input
         if path_input:
             if os.path.exists(path_input):
                 size_mb = os.path.getsize(path_input) / 1e6
@@ -399,9 +508,11 @@ with mode_batch:
     st.markdown("#### Folder Path")
     batch_folder_input = st.text_input(
         "Folder path",
-        placeholder="/Users/deepak/Videos/starkids/",
+        value=_cookie_text("batch_folder_path", ""),
+        placeholder="/Users/Condenast/Videos/Condenast/",
         label_visibility="collapsed",
     )
+    cookies["batch_folder_path"] = batch_folder_input
 
     VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 
@@ -429,6 +540,9 @@ with mode_batch:
         st.caption("Each video is analyzed in sequence. Results export as a single combined file.")
 
 
+cookies.save()
+
+
 # ─────────────────────────────────────────────
 # PIPELINE
 # ─────────────────────────────────────────────
@@ -445,11 +559,7 @@ if analyze_btn:
         st.stop()
 
     if uploaded_file:
-        suffix = Path(uploaded_file.name).suffix
-        tmp    = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        tmp.write(uploaded_file.read())
-        tmp.close()
-        actual_path = tmp.name
+        actual_path = _save_uploaded_file(uploaded_file)
     else:
         actual_path = video_file_path
 

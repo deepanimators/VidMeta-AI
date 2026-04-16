@@ -3,6 +3,8 @@ gatherUsageStats = false
 
 [server]
 headless = true
+maxUploadSize = 2024
+maxMessageSize = 2024
 
 [client]
 showErrorDetails = true

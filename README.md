@@ -77,7 +77,7 @@ In the app sidebar: select **Ollama — Local/Free**, enter `http://localhost:11
 3. Best free vision model: `meta-llama/llama-3.2-11b-vision-instruct:free`
 
 ### Option C — OpenAI
-API key from [platform.openai.com](https://platform.openai.com/api-keys). Use `gpt-4o` for best results.
+Use an OpenAI API Key from [platform.openai.com](https://platform.openai.com/api-keys). OpenAI accounts used here must have API billing enabled. Use `gpt-4o` for best results.
 
 ### Option D — Anthropic Claude
 API key from [console.anthropic.com](https://console.anthropic.com/). Use `claude-opus-4-6` for best results.
@@ -119,6 +119,17 @@ API key from [aistudio.google.com](https://aistudio.google.com/apikey). Free tie
 | Frame interval | Extract 1 frame every N seconds |
 | Max frames | How many frames sent to LLM (more = better analysis, slower) |
 | Brand context | Used to tailor all metadata to your brand |
+
+Sidebar selections, including the active LLM provider, are stored in browser cookies and will reappear on future visits from the same browser on the same host/port.
+
+### Large uploads
+
+Streamlit limits browser uploads to 200 MB by default. To allow 1 GB uploads, keep these settings in `config.toml`:
+
+- `server.maxUploadSize = 1024`
+- `server.maxMessageSize = 1024`
+
+Restart the app after changing them. For very large files, local file path upload is still the most reliable option.
 
 ---
 
