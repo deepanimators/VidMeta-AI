@@ -44,7 +44,7 @@ source venv/bin/activate        # Mac/Linux
 pip install -r requirements.txt
 
 # 4. Run the app
-streamlit run app.py
+vidmeta run app.py
 ```
 
 The app opens at **http://localhost:8501**
