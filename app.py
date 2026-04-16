@@ -63,8 +63,8 @@ with st.sidebar:
     if provider == "Ollama — Local / Free":
         st.info("Requires Ollama running locally with a vision model.")
         ollama_url = st.text_input("Ollama URL", value="http://localhost:11434")
-        model      = st.text_input("Model name", value="llava",
-                                   help="e.g. llava · bakllava · llava-llama3 · moondream")
+        model      = st.text_input("Model name", value="gemma4",
+                                   help="e.g. gemma4 · bakgemma4 · gemma4-llama3 · moondream")
         st.caption("→ [Get Ollama](https://ollama.com/)  |  [Vision models](https://ollama.com/search?c=vision)")
 
     elif provider == "OpenRouter — Free tier":
@@ -194,13 +194,21 @@ def transcribe_audio(video_path, wmodel):
 
 def _call_ollama(frames, prompt, url, mdl):
     import requests
+    # Use /api/chat for vision models (Ollama's proper vision endpoint)
+    messages = [
+        {
+            "role": "user",
+            "content": prompt,
+            "images": frames
+        }
+    ]
     r = requests.post(
-        f"{url}/api/generate",
-        json={"model": mdl, "prompt": prompt, "images": frames, "stream": False},
+        f"{url}/api/chat",
+        json={"model": mdl, "messages": messages, "stream": False},
         timeout=180,
     )
     r.raise_for_status()
-    return r.json().get("response", "")
+    return r.json().get("message", {}).get("content", "")
 
 
 def _call_openai_compat(frames, prompt, key, mdl, base):

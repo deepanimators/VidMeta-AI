@@ -65,11 +65,11 @@ The app opens at **http://localhost:8501**
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Pull a vision model
-ollama pull llava              # 4GB — recommended
+ollama pull gemma4              # 4GB — recommended
 ollama pull moondream          # 1.7GB — lightweight
-ollama pull llava-llama3       # 8GB — best quality
+ollama pull gemma4-llama3       # 8GB — best quality
 ```
-In the app sidebar: select **Ollama — Local/Free**, enter `http://localhost:11434`, model name `llava`.
+In the app sidebar: select **Ollama — Local/Free**, enter `http://localhost:11434`, model name `gemma4`.
 
 ### Option B — OpenRouter (Free tier available)
 1. Sign up at [openrouter.ai](https://openrouter.ai/)
@@ -136,7 +136,7 @@ Make sure ffmpeg is installed and in your PATH. Test: `ffmpeg -version`
 Make sure Ollama is running: `ollama serve`
 
 **LLM returns non-JSON:**
-Try a more capable model. `gpt-4o`, `claude-opus-4-6`, or `llava-llama3` are most reliable.
+Try a more capable model. `gpt-4o`, `claude-opus-4-6`, or `gemma4-llama3` are most reliable.
 
 **Out of memory with large videos:**
 Reduce `Max frames` to 3-4, increase `Frame interval` to 10-15 seconds.

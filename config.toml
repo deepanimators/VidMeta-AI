@@ -4,8 +4,12 @@ gatherUsageStats = false
 [server]
 headless = true
 
+[client]
+showErrorDetails = true
+
 [ui]
-hideTopBar = false
+hideTopBar = true
+hideRunningIndicator = false
 
 [theme]
 primaryColor = "#2563EB"
