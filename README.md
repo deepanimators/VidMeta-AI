@@ -43,8 +43,14 @@ source venv/bin/activate        # Mac/Linux
 # 3. Install dependencies
 pip install -r requirements.txt
 
+# If still failing, try running Python directly
+python -m vidmeta.cli run app.py
+
 # 4. Run the app
 vidmeta run app.py
+
+# Check if the entry point was installed:
+pip show -f vidmeta
 ```
 
 The app opens at **http://localhost:8501**
