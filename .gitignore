@@ -191,6 +191,17 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# VidMeta generated/runtime files
+.local/
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/tsconfig.tsbuildinfo
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
 # PyPI configuration file
 .pypirc
 

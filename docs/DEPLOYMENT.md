@@ -1,25 +1,31 @@
-# Deployment Guide
+# Deployment
 
-## Local install
+## Local Development
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install .
-vidmeta run
+vidmeta serve
 ```
 
-Open `http://localhost:8501`.
-
-## Large local files
-
-For files larger than the browser upload limit, use the app's `Local file path` mode or `Batch - Folder` mode. This avoids sending the entire file through the browser upload channel.
-
-To raise browser upload limits:
+In another terminal:
 
 ```bash
-VIDMETA_MAX_UPLOAD_MB=4096 VIDMETA_MAX_MESSAGE_MB=4096 vidmeta run
+cd web
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+## Desktop Development
+
+```bash
+vidmeta serve
+cd web && npm install
+cd ../desktop && npm install && npm run dev
 ```
 
 ## Docker
@@ -28,20 +34,8 @@ VIDMETA_MAX_UPLOAD_MB=4096 VIDMETA_MAX_MESSAGE_MB=4096 vidmeta run
 docker compose up --build
 ```
 
-Open `http://localhost:8501`.
+API: `http://localhost:8000`.
 
-Place videos in `./videos` and use paths like `/videos/example.mp4` inside the container.
+## Hosted Warning
 
-## Ollama with Docker
-
-If Ollama is running on the host, use:
-
-```text
-http://host.docker.internal:11434
-```
-
-in the app sidebar.
-
-## Hosted warning
-
-This app is designed for local use. Hosted deployments need stronger secret management, authentication, upload scanning, rate limiting, and storage controls.
+Hosted mode currently has no auth. Use only for private/self-hosted deployments until auth, rate limiting, upload scanning, and secret isolation are added.

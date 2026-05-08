@@ -28,7 +28,7 @@ flowchart LR
 
 ## Suggested stack
 
-- Web: Streamlit for internal tools, or Next.js if a full SaaS UI is needed.
+- Web: current React/Vite dashboard; Next.js can be considered if public SaaS routing/auth needs grow.
 - API: FastAPI.
 - Worker: Python worker process.
 - Queue: Redis + RQ/Celery/Arq.

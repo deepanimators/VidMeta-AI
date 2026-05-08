@@ -1,63 +1,31 @@
-# Deep Folder-by-Folder Audit
+# Folder Audit
 
-## Current repository type
-
-VidMeta AI is currently a Python Streamlit desktop/local web app, not a React/Vite frontend plus Node/Express backend.
-
-## Current structure
+VidMeta AI is now a FastAPI + React/Vite + Tauri project.
 
 ```text
-.
-├── app.py                    # Main Streamlit UI, video processing, prompts, provider calls
-├── vidmeta/
-│   ├── __init__.py
-│   └── cli.py                # `vidmeta run` launcher
-├── .streamlit/config.toml    # Streamlit runtime config, including upload size
-├── config.toml               # Legacy/root copy for reference
-├── requirements.txt          # Runtime dependencies
-├── pyproject.toml            # Package metadata and console entry point
-├── Dockerfile
-├── docker-compose.yml
-├── .github/workflows/ci.yml
-├── docs/
-└── README.md
+api/                 FastAPI app, routes, uploads, jobs
+web/                 React/Vite dashboard
+desktop/             Tauri desktop shell
+vidmeta/             Reusable Python service modules
+  ai/                prompts, provider adapters, metadata parsing
+  video/             frame extraction and transcription
+  exports/           JSON/CSV/TXT export builders
+  service/           SQLite database and pipeline orchestration
+  storage/           local disk and S3-compatible storage helpers
+legacy/              old Streamlit app retained for migration reference
+tests/               API and export tests
 ```
 
-## What is strong
+## Strengths
 
-- Local-first workflow: users can run the app on their own machine and process local video paths.
-- Simple setup: one Streamlit app and one CLI entry point.
-- Multi-provider LLM support: Ollama, OpenRouter, OpenAI, Anthropic, and Gemini.
-- Batch mode already exists for local folders.
-- Large upload support is now configured through `.streamlit/config.toml` and `vidmeta run`.
+- Large local videos can be processed by path without browser upload.
+- Browser uploads use chunked resumable endpoints.
+- SQLite stores settings, jobs, transcripts, and metadata outputs.
+- Storage can be local disk or S3-compatible.
+- Tauri shell provides native file/folder picking.
 
-## Main risks
+## Remaining Gaps
 
-- `app.py` owns UI, video processing, prompts, provider clients, JSON parsing, and exports. This is fine for an MVP but hard to test.
-- No automated tests yet.
-- No typed request/response schema for generated metadata.
-- Provider model names and prompt contracts are not centrally versioned.
-- API keys can be typed into the sidebar and stored in browser cookies. This is acceptable for local use, but hosted deployments need stronger secret handling.
-
-## Recommended next structure
-
-```text
-vidmeta/
-├── cli.py
-├── settings.py
-├── video/
-│   ├── frames.py
-│   └── transcription.py
-├── ai/
-│   ├── prompts.py
-│   ├── providers.py
-│   └── schemas.py
-├── exports/
-│   ├── csv_export.py
-│   └── text_export.py
-└── ui/
-    └── streamlit_app.py
-tests/
-```
-
-Keep this as a refactor target, not a prerequisite for releasing the MIT local app.
+- Tauri currently expects the FastAPI service to be started separately.
+- Hosted mode has no auth and must remain private/self-hosted.
+- More tests are needed for real video fixtures, provider mocks, resumable resume, and desktop packaging.

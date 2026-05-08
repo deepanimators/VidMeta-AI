@@ -2,15 +2,15 @@
 
 ## High priority
 
-- Add tests for `vidmeta run` upload-limit flags.
-- Extract LLM provider calls from `app.py` into `vidmeta/ai/providers.py`.
+- Add tests for resumable upload resume behavior.
+- Add tests for provider adapters with mocked SDK clients.
 - Add schema validation for LLM metadata JSON.
-- Stop storing hosted-provider API keys in cookies for non-local deployments.
+- Add encrypted settings or secret storage for hosted-provider API keys.
 - Add better JSON repair/error recovery for LLM output.
 
 ## Medium priority
 
-- Add optional SQLite run history.
+- Bundle FastAPI as a Tauri sidecar.
 - Add progress details for long transcriptions.
 - Add provider-specific model configuration in one place.
 - Add sample fixture video that is intentionally licensed for tests.

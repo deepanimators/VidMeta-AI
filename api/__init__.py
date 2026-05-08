@@ -1,0 +1,1 @@
+"""VidMeta AI FastAPI service."""

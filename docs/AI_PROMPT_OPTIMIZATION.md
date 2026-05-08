@@ -11,7 +11,7 @@ This is a reasonable MVP design because it separates video understanding from me
 
 ## Problems to fix next
 
-- Prompt templates live inside `app.py`.
+- Prompt templates now live in `vidmeta/ai/prompts.py`.
 - Output validity relies on "Return ONLY valid JSON".
 - There is no schema validation or repair pass.
 - Platform constraints are repeated as natural language.
