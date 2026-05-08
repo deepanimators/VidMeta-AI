@@ -58,6 +58,15 @@ type AppSettings = {
   storage_settings: StorageSettings;
 };
 
+type JobEvent = {
+  id: number;
+  stage: string;
+  progress: number;
+  message: string;
+  details?: Record<string, unknown>;
+  created_at?: string;
+};
+
 type Job = {
   id: string;
   source_type: string;
@@ -68,6 +77,9 @@ type Job = {
   progress: number;
   error_message?: string | null;
   created_at?: string;
+  updated_at?: string;
+  completed_at?: string | null;
+  events?: JobEvent[];
 };
 
 type JobResult = Job & {
@@ -79,6 +91,48 @@ type JobResult = Job & {
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 const CUSTOM_MODEL_VALUE = "__custom__";
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm", "m4v"]);
+
+const SOCIAL_PLATFORMS = [
+  { key: "youtube", label: "YouTube" },
+  { key: "youtube_shorts", label: "YouTube Shorts" },
+  { key: "instagram_reels", label: "Instagram Reels" },
+  { key: "instagram_feed", label: "Instagram Feed" },
+  { key: "facebook", label: "Facebook" },
+  { key: "facebook_reels", label: "Facebook Reels" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "x", label: "X / Twitter" },
+  { key: "threads", label: "Threads" },
+  { key: "bluesky", label: "Bluesky" },
+  { key: "mastodon", label: "Mastodon" },
+  { key: "pinterest", label: "Pinterest" },
+  { key: "snapchat_spotlight", label: "Snapchat Spotlight" },
+  { key: "reddit", label: "Reddit" },
+  { key: "whatsapp_channels", label: "WhatsApp Channels" },
+  { key: "telegram_channels", label: "Telegram Channels" },
+  { key: "discord", label: "Discord" },
+  { key: "tumblr", label: "Tumblr" },
+  { key: "medium", label: "Medium" },
+  { key: "quora", label: "Quora" },
+  { key: "substack_notes", label: "Substack Notes" },
+  { key: "twitch", label: "Twitch" },
+  { key: "vimeo", label: "Vimeo" },
+  { key: "rumble", label: "Rumble" },
+  { key: "dailymotion", label: "Dailymotion" },
+  { key: "wechat_channels", label: "WeChat Channels" },
+  { key: "douyin", label: "Douyin" },
+  { key: "kuaishou", label: "Kuaishou" },
+  { key: "bilibili", label: "Bilibili" },
+  { key: "weibo", label: "Weibo" },
+  { key: "vk", label: "VK" },
+  { key: "line_voom", label: "LINE VOOM" },
+  { key: "lemon8", label: "Lemon8" },
+  { key: "sharechat", label: "ShareChat" },
+  { key: "moj", label: "Moj" },
+  { key: "josh", label: "Josh" }
+] as const;
+
+const PLATFORM_LABELS = Object.fromEntries(SOCIAL_PLATFORMS.map((platform) => [platform.key, platform.label]));
 
 const MODEL_PRESETS: Record<string, { label: string; value: string; note?: string }[]> = {
   ollama: [
@@ -521,6 +575,7 @@ function App() {
             ))}
             {!jobs.length && <p className="muted">No jobs yet.</p>}
           </div>
+          {selectedJob && <JobProgressDetails job={selectedJob} />}
         </section>
 
         {selectedJob && (
@@ -614,37 +669,80 @@ async function canUseDesktopDialog() {
   }
 }
 
+function JobProgressDetails({ job }: { job: Job }) {
+  const events = job.events ?? [];
+  const latest = events[events.length - 1];
+  return (
+    <div className="job-details">
+      <div className="job-details-head">
+        <div>
+          <strong>{job.source_path.split("/").pop() || job.id}</strong>
+          <span>{job.status} / {job.stage}</span>
+        </div>
+        <strong>{job.progress}%</strong>
+      </div>
+      <div className="progress large"><span style={{ width: `${Math.max(0, Math.min(job.progress, 100))}%` }} /></div>
+      <div className="job-stats">
+        <span>Mode: {job.mode}</span>
+        <span>Source: {job.source_type}</span>
+        <span>Events: {events.length}</span>
+        {latest?.created_at && <span>Last update: {formatDate(latest.created_at)}</span>}
+      </div>
+      <div className="timeline">
+        {events.map((event) => (
+          <div className="timeline-item" key={event.id}>
+            <span className={`timeline-dot ${event.stage}`} />
+            <div>
+              <strong>{stageLabel(event.stage)} <em>{event.progress}%</em></strong>
+              <p>{event.message || stageLabel(event.stage)}</p>
+              {event.details && Object.keys(event.details).length > 0 && (
+                <small>{formatDetails(event.details)}</small>
+              )}
+              {event.created_at && <time>{formatDate(event.created_at)}</time>}
+            </div>
+          </div>
+        ))}
+        {!events.length && <p className="muted">Detailed progress will appear after the job starts.</p>}
+      </div>
+    </div>
+  );
+}
+
 function MetadataView({ metadata, analysis, transcript }: { metadata: Record<string, unknown>; analysis: string; transcript: string }) {
-  const platforms = ["youtube", "instagram", "facebook", "tiktok", "linkedin"];
   const batchResults = Array.isArray(metadata.batch_results) ? metadata.batch_results : null;
+  const platforms = platformEntries(metadata);
   return (
     <div className="metadata">
       <div className="summary">
         <strong>{String(metadata.video_summary ?? "Generated metadata")}</strong>
-        <span>{String(metadata.content_category ?? "")}</span>
+        <span>{String(metadata.content_category ?? "")}{!batchResults ? ` / ${platforms.length} platform profiles` : ""}</span>
       </div>
       {batchResults && (
         <div className="batch-list">
           {batchResults.map((item, index) => {
             const row = item as { file?: string; metadata?: Record<string, unknown> };
+            const rowPlatforms = row.metadata ? platformEntries(row.metadata) : [];
             return (
               <article className="platform-card" key={`${row.file}-${index}`}>
                 <h3>{row.file ?? `Video ${index + 1}`}</h3>
                 <p className="muted">{String(row.metadata?.video_summary ?? "Metadata generated")}</p>
+                <small>{rowPlatforms.length} platform profiles generated</small>
               </article>
             );
           })}
         </div>
       )}
       {!batchResults && <div className="platform-grid">
-        {platforms.map((platform) => {
-          const data = (metadata[platform] ?? {}) as Record<string, unknown>;
+        {platforms.map(({ key, label, data }) => {
           return (
-            <article className="platform-card" key={platform}>
-              <h3>{platform}</h3>
+            <article className="platform-card" key={key}>
+              <h3>{label}</h3>
               <label>Title<textarea readOnly value={String(data.title ?? "")} /></label>
               <label>Description<textarea readOnly value={String(data.description ?? "")} /></label>
               <label>Hashtags<textarea readOnly value={Array.isArray(data.hashtags) ? data.hashtags.join(" ") : String(data.hashtags ?? "")} /></label>
+              <label>Keywords<textarea readOnly value={Array.isArray(data.keywords) ? data.keywords.join(", ") : String(data.keywords ?? "")} /></label>
+              <label>CTA<textarea readOnly value={String(data.cta ?? "")} /></label>
+              <label>Posting tip<textarea readOnly value={String(data.posting_tip ?? "")} /></label>
             </article>
           );
         })}
@@ -656,6 +754,56 @@ function MetadataView({ metadata, analysis, transcript }: { metadata: Record<str
       </details>
     </div>
   );
+}
+
+function platformEntries(metadata: Record<string, unknown>) {
+  const source = isRecord(metadata.platforms) ? metadata.platforms : metadata;
+  const entries: { key: string; label: string; data: Record<string, unknown> }[] = [];
+  const seen = new Set<string>();
+  for (const platform of SOCIAL_PLATFORMS) {
+    const value = source[platform.key];
+    if (isRecord(value)) {
+      entries.push({ key: platform.key, label: platform.label, data: value });
+      seen.add(platform.key);
+    }
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (!seen.has(key) && isRecord(value) && looksLikePlatformMetadata(value)) {
+      entries.push({ key, label: platformLabel(key), data: value });
+    }
+  }
+  return entries;
+}
+
+function looksLikePlatformMetadata(value: Record<string, unknown>) {
+  return ["title", "description", "hashtags", "keywords", "cta", "posting_tip"].some((key) => key in value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function platformLabel(key: string) {
+  return PLATFORM_LABELS[key] ?? titleize(key);
+}
+
+function stageLabel(stage: string) {
+  return titleize(stage.replace(/^batch_/, "Batch "));
+}
+
+function titleize(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char: string) => char.toUpperCase());
+}
+
+function formatDetails(details: Record<string, unknown>) {
+  return Object.entries(details)
+    .map(([key, value]) => `${stageLabel(key)}: ${String(value)}`)
+    .join(" / ");
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 async function uploadResumable(url: string, file: File, onProgress: (progress: number) => void) {

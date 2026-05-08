@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -89,14 +90,19 @@ class JobRunner:
             return
         request = job["request"]
         try:
-            self.db.update_job(job_id, status="running", stage="starting", progress=1)
+            self._record_progress(job_id, "starting", 1, "Preparing job settings and source")
             settings = self.db.get_settings()
             brand = request.get("brand_context") or settings.brand_context.model_dump()
             video = request.get("video_settings") or settings.video_settings.model_dump()
             provider = request.get("provider_settings") or settings.provider_settings.model_dump()
 
-            def progress(stage: str, value: int) -> None:
-                self.db.update_job(job_id, stage=stage, progress=value)
+            def progress(
+                stage: str,
+                value: int,
+                message: str = "",
+                details: dict[str, Any] | None = None,
+            ) -> None:
+                self._record_progress(job_id, stage, value, message, details)
 
             brand_model = BrandContext.model_validate(brand)
             video_model = VideoSettings.model_validate(video)
@@ -131,7 +137,9 @@ class JobRunner:
                 progress=100,
                 completed_at="CURRENT_TIMESTAMP",
             )
+            self.db.add_job_event(job_id, "completed", 100, "Job completed successfully")
         except Exception as exc:
+            current = self.db.get_job(job_id) or job
             self.db.update_job(
                 job_id,
                 status="failed",
@@ -139,6 +147,18 @@ class JobRunner:
                 error_message=str(exc),
                 completed_at="CURRENT_TIMESTAMP",
             )
+            self.db.add_job_event(job_id, "failed", int(current.get("progress") or 0), str(exc))
+
+    def _record_progress(
+        self,
+        job_id: str,
+        stage: str,
+        value: int,
+        message: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        self.db.update_job(job_id, status="running", stage=stage, progress=value)
+        self.db.add_job_event(job_id, stage, value, message or stage.replace("_", " ").title(), details)
 
     def _run_batch(
         self,
@@ -146,19 +166,48 @@ class JobRunner:
         brand: BrandContext,
         video: VideoSettings,
         provider: ProviderSettings,
-        progress: Callable[[str, int], None],
+        progress: Callable[[str, int, str, dict[str, Any] | None], None],
     ) -> dict[str, Any]:
         files = self._video_files(Path(folder))
         results: list[dict[str, Any]] = []
         transcripts: list[str] = []
         analyses: list[str] = []
         total = len(files)
+        progress(
+            "batch",
+            2,
+            f"Starting batch analysis for {total} video file{'s' if total != 1 else ''}",
+            {"file_count": total, "folder": folder},
+        )
         for index, path in enumerate(files, start=1):
             base_progress = int(((index - 1) / total) * 95)
 
-            def batch_progress(stage: str, value: int) -> None:
+            progress(
+                "batch",
+                base_progress,
+                f"Processing {path.name} ({index} of {total})",
+                {"file": path.name, "index": index, "total": total},
+            )
+
+            def batch_progress(
+                stage: str,
+                value: int,
+                message: str = "",
+                details: dict[str, Any] | None = None,
+            ) -> None:
                 scaled = base_progress + int((value / 100) * (95 / total))
-                progress(f"{index}/{total} {stage}", min(scaled, 95))
+                merged_details = {
+                    "file": path.name,
+                    "index": index,
+                    "total": total,
+                    **(details or {}),
+                }
+                progress(
+                    f"batch_{stage}",
+                    min(scaled, 95),
+                    f"{path.name}: {message or stage}",
+                    merged_details,
+                )
 
             item = analyze_video(
                 str(path),
@@ -170,6 +219,12 @@ class JobRunner:
             transcripts.append(f"## {path.name}\n{item['transcript']}")
             analyses.append(f"## {path.name}\n{item['analysis']}")
             results.append({"file": path.name, "metadata": item["metadata"]})
+            progress(
+                "batch",
+                min(int((index / total) * 95), 95),
+                f"Completed {path.name} ({index} of {total})",
+                {"file": path.name, "index": index, "total": total},
+            )
         return {
             "transcript": "\n\n".join(transcripts),
             "analysis": "\n\n".join(analyses),
@@ -183,7 +238,12 @@ class JobRunner:
 
     @staticmethod
     def _video_files(folder: Path) -> list[Path]:
-        return sorted(path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS)
+        return sorted(
+            path
+            for root, _, files in os.walk(folder)
+            for path in (Path(root) / name for name in files)
+            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
+        )
 
 
 def merged_settings(settings: AppSettings, payload: dict) -> dict:

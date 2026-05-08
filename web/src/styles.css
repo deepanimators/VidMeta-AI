@@ -368,6 +368,107 @@ button:disabled {
   font-size: 13px;
 }
 
+.job-details {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.job-details-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.job-details-head div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.job-details-head span,
+.job-stats,
+.timeline time,
+.timeline small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.progress.large {
+  margin: 0 0 12px;
+}
+
+.job-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.job-stats span {
+  padding: 5px 8px;
+  background: #f6fafc;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.timeline {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: var(--accent);
+}
+
+.timeline-dot.completed {
+  background: var(--accent-2);
+}
+
+.timeline-dot.failed {
+  background: var(--danger);
+}
+
+.timeline-item strong {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.timeline-item em {
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.timeline-item p {
+  margin: 3px 0;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.timeline-item small,
+.timeline-item time {
+  display: block;
+  line-height: 1.45;
+}
+
 .result-panel {
   margin-top: 18px;
 }
@@ -422,7 +523,6 @@ button:disabled {
 
 .platform-card h3 {
   margin: 0 0 10px;
-  text-transform: capitalize;
 }
 
 .platform-card label {

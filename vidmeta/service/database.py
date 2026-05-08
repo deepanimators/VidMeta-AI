@@ -46,6 +46,16 @@ CREATE TABLE IF NOT EXISTS jobs (
     completed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS job_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL,
+    progress INTEGER NOT NULL DEFAULT 0,
+    message TEXT NOT NULL DEFAULT '',
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS transcripts (
     job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
     text TEXT NOT NULL,
@@ -62,6 +72,7 @@ CREATE TABLE IF NOT EXISTS metadata_outputs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id, id);
 """
 
 
@@ -167,6 +178,20 @@ class Database:
                     json.dumps(data.get("request", {})),
                 ),
             )
+            conn.execute(
+                """
+                INSERT INTO job_events (job_id, stage, progress, message, details_json)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    data["id"],
+                    data.get("stage", "queued"),
+                    data.get("progress", 0),
+                    data.get("message", "Job queued"),
+                    json.dumps(data.get("details", {})),
+                ),
+            )
+        data["events"] = self.list_job_events(data["id"])
         return data
 
     def update_job(self, job_id: str, **values: Any) -> None:
@@ -185,10 +210,45 @@ class Database:
         with self.connect() as conn:
             conn.execute(f"UPDATE jobs SET {', '.join(assignments)} WHERE id = ?", params)
 
+    def add_job_event(
+        self,
+        job_id: str,
+        stage: str,
+        progress: int,
+        message: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_events (job_id, stage, progress, message, details_json)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (job_id, stage, progress, message, json.dumps(details or {})),
+            )
+
+    def list_job_events(self, job_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, job_id, stage, progress, message, details_json, created_at
+                FROM job_events
+                WHERE job_id = ?
+                ORDER BY id ASC
+                """,
+                (job_id,),
+            ).fetchall()
+        events: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["details"] = json.loads(item.pop("details_json") or "{}")
+            events.append(item)
+        return events
+
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        return self._decode_job(row) if row else None
+        return self._with_events(self._decode_job(row)) if row else None
 
     def list_jobs(self, limit: int = 50) -> list[dict[str, Any]]:
         with self.connect() as conn:
@@ -196,7 +256,7 @@ class Database:
                 "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [self._decode_job(row) for row in rows]
+        return [self._with_events(self._decode_job(row)) for row in rows]
 
     def save_result(self, job_id: str, transcript: str, analysis: str, metadata: dict[str, Any], raw: str | None) -> None:
         with self.connect() as conn:
@@ -239,7 +299,11 @@ class Database:
         data["analysis"] = row["analysis"] or ""
         data["metadata"] = json.loads(row["metadata_json"]) if row["metadata_json"] else None
         data["raw_output"] = row["raw_output"]
-        return data
+        return self._with_events(data)
+
+    def _with_events(self, job: dict[str, Any]) -> dict[str, Any]:
+        job["events"] = self.list_job_events(job["id"])
+        return job
 
     @staticmethod
     def _decode_job(row: sqlite3.Row) -> dict[str, Any]:

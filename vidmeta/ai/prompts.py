@@ -1,3 +1,23 @@
+from vidmeta.ai.schemas import PLATFORM_LABELS, PLATFORMS
+
+
+PLATFORM_REQUIREMENTS = "\n".join(
+    f"- {key}: optimized metadata for {PLATFORM_LABELS[key]}" for key in PLATFORMS
+)
+
+PLATFORM_JSON_TEMPLATE = ",\n".join(
+    f'''    "{key}": {{
+      "title": "Platform-native hook/title",
+      "description": "Platform-native caption or description",
+      "hashtags": ["#tag1", "#tag2", "#tag3"],
+      "keywords": ["keyword1", "keyword2", "keyword3"],
+      "cta": "Platform-native call to action",
+      "posting_tip": "Best format/timing/content tip for {PLATFORM_LABELS[key]}"
+    }}'''
+    for key in PLATFORMS
+)
+
+
 ANALYSIS_PROMPT = """You are a content strategist analyzing a video for a social media brand.
 
 Important safety rule:
@@ -34,48 +54,15 @@ Niche: {brand_niche}
 Audience: {target_audience}
 Tone: {tone}
 
+Generate metadata for every platform key below. Keep each platform native to the audience, format, caption length, discovery behavior, and CTA style of that platform.
+
+{platform_requirements}
+
 Return ONLY valid JSON. No markdown, no backticks, no extra text.
 {{
   "video_summary": "2-3 sentence summary",
   "content_category": "e.g. Product Showcase",
-  "youtube": {{
-    "title": "SEO title with keyword, under 60 chars",
-    "description": "300-400 word description. Hook in first 2 lines. Strong CTA at end.",
-    "hashtags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10"],
-    "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8","kw9","kw10","kw11","kw12","kw13","kw14","kw15"],
-    "cta": "Subscribe CTA text",
-    "posting_tip": "Best posting time for YouTube"
-  }},
-  "instagram": {{
-    "title": "Hook line for caption opening",
-    "description": "150-200 word caption. Storytelling. Line breaks. End with question or CTA.",
-    "hashtags": ["#h1","#h2","#h3","#h4","#h5","#h6","#h7","#h8","#h9","#h10","#h11","#h12","#h13","#h14","#h15","#h16","#h17","#h18","#h19","#h20","#h21","#h22","#h23","#h24","#h25","#h26","#h27","#h28","#h29","#h30"],
-    "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8","kw9","kw10"],
-    "cta": "Follow + link in bio CTA",
-    "posting_tip": "Best posting time for Instagram"
-  }},
-  "facebook": {{
-    "title": "Facebook post heading",
-    "description": "100-150 word conversational post.",
-    "hashtags": ["#h1","#h2","#h3","#h4","#h5"],
-    "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8"],
-    "cta": "Like/Share/Comment CTA",
-    "posting_tip": "Best posting time for Facebook"
-  }},
-  "tiktok": {{
-    "title": "Punchy TikTok hook under 100 chars",
-    "description": "Short fun caption under 100 words.",
-    "hashtags": ["#h1","#h2","#h3","#h4","#h5","#h6","#h7","#h8","#h9","#h10","#h11","#h12","#h13","#h14","#h15"],
-    "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8"],
-    "cta": "Follow for more CTA",
-    "posting_tip": "Best posting time for TikTok"
-  }},
-  "linkedin": {{
-    "title": "Professional LinkedIn headline",
-    "description": "200-250 word post. Brand story angle. Entrepreneur perspective.",
-    "hashtags": ["#h1","#h2","#h3","#h4","#h5","#h6","#h7"],
-    "keywords": ["kw1","kw2","kw3","kw4","kw5","kw6","kw7","kw8"],
-    "cta": "Connect/Follow CTA",
-    "posting_tip": "Best posting time for LinkedIn"
+  "platforms": {{
+{platform_json_template}
   }}
 }}"""

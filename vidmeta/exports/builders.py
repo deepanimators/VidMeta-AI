@@ -5,16 +5,7 @@ import io
 import json
 from typing import Any
 
-from vidmeta.ai.schemas import PLATFORMS
-
-
-PLATFORM_LABELS = {
-    "youtube": "YouTube",
-    "instagram": "Instagram",
-    "facebook": "Facebook",
-    "tiktok": "TikTok",
-    "linkedin": "LinkedIn",
-}
+from vidmeta.ai.schemas import PLATFORM_LABELS, PLATFORMS
 
 
 def export_json(metadata: dict[str, Any]) -> str:
@@ -25,15 +16,12 @@ def export_csv(metadata: dict[str, Any]) -> str:
     if isinstance(metadata.get("batch_results"), list):
         return _export_batch_csv(metadata["batch_results"])
     rows: list[dict[str, str]] = []
-    for platform in PLATFORMS:
-        data = metadata.get(platform, {})
-        if not isinstance(data, dict):
-            continue
+    for platform, data in _platform_entries(metadata):
         tags = data.get("hashtags", [])
         keywords = data.get("keywords", [])
         rows.append(
             {
-                "Platform": PLATFORM_LABELS[platform],
+                "Platform": _platform_label(platform),
                 "Title": str(data.get("title", "")),
                 "Description": str(data.get("description", "")),
                 "Hashtags": " ".join(tags) if isinstance(tags, list) else str(tags),
@@ -55,14 +43,11 @@ def export_txt(metadata: dict[str, Any]) -> str:
     if isinstance(metadata.get("batch_results"), list):
         return _export_batch_txt(metadata["batch_results"])
     sections: list[str] = []
-    for platform in PLATFORMS:
-        data = metadata.get(platform, {})
-        if not isinstance(data, dict):
-            continue
+    for platform, data in _platform_entries(metadata):
         tags = data.get("hashtags", [])
         keywords = data.get("keywords", [])
         sections.append(
-            f"{'=' * 40}\n{PLATFORM_LABELS[platform]}\n{'=' * 40}\n"
+            f"{'=' * 40}\n{_platform_label(platform)}\n{'=' * 40}\n"
             f"TITLE:\n{data.get('title', '')}\n\n"
             f"DESCRIPTION:\n{data.get('description', '')}\n\n"
             f"HASHTAGS:\n{' '.join(tags) if isinstance(tags, list) else tags}\n\n"
@@ -80,16 +65,13 @@ def _export_batch_csv(results: list[dict[str, Any]]) -> str:
         filename = str(result.get("file", ""))
         if not isinstance(metadata, dict):
             continue
-        for platform in PLATFORMS:
-            data = metadata.get(platform, {})
-            if not isinstance(data, dict):
-                continue
+        for platform, data in _platform_entries(metadata):
             tags = data.get("hashtags", [])
             keywords = data.get("keywords", [])
             rows.append(
                 {
                     "File": filename,
-                    "Platform": PLATFORM_LABELS[platform],
+                    "Platform": _platform_label(platform),
                     "Title": str(data.get("title", "")),
                     "Description": str(data.get("description", "")),
                     "Hashtags": " ".join(tags) if isinstance(tags, list) else str(tags),
@@ -115,3 +97,23 @@ def _export_batch_txt(results: list[dict[str, Any]]) -> str:
         if isinstance(metadata, dict):
             parts.append(export_txt(metadata))
     return "\n\n".join(parts)
+
+
+def _platform_entries(metadata: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    source = metadata.get("platforms") if isinstance(metadata.get("platforms"), dict) else metadata
+    entries: list[tuple[str, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for platform in PLATFORMS:
+        data = source.get(platform, {}) if isinstance(source, dict) else {}
+        if isinstance(data, dict):
+            entries.append((platform, data))
+            seen.add(platform)
+    if isinstance(source, dict):
+        for platform, data in source.items():
+            if platform not in seen and isinstance(data, dict):
+                entries.append((platform, data))
+    return entries
+
+
+def _platform_label(platform: str) -> str:
+    return PLATFORM_LABELS.get(platform, platform.replace("_", " ").title())
