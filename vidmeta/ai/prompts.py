@@ -68,7 +68,7 @@ Niche: {brand_niche}
 Audience: {target_audience}
 Tone: {tone}
 
-Generate metadata for every platform key below. Keep each platform native to the audience, format, caption length, discovery behavior, and CTA style of that platform.
+Generate metadata for every platform key below. Use the exact keys shown. Do not collapse variants into generic keys such as instagram, facebook, or youtube. Keep each platform native to the audience, format, caption length, discovery behavior, and CTA style of that platform.
 
 {platform_requirements}
 
@@ -76,6 +76,31 @@ Return ONLY valid JSON. No markdown, no backticks, no extra text.
 {{
   "video_summary": "2-3 sentence summary",
   "content_category": "e.g. Product Showcase",
+  "platforms": {{
+{platform_json_template}
+  }}
+}}"""
+
+
+METADATA_REPAIR_PROMPT = """The previous metadata response missed required selected platforms.
+
+VIDEO ANALYSIS:
+{analysis}
+
+Brand: {brand_name}
+Niche: {brand_niche}
+Audience: {target_audience}
+Tone: {tone}
+
+Existing metadata JSON:
+{existing_metadata}
+
+Generate metadata ONLY for the missing platform keys below. Use the exact keys. Do not replace them with generic keys such as instagram, facebook, or youtube.
+
+{platform_requirements}
+
+Return ONLY valid JSON in this exact shape. No markdown, no backticks, no extra text.
+{{
   "platforms": {{
 {platform_json_template}
   }}

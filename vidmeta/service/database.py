@@ -302,7 +302,20 @@ class Database:
         return self._with_events(data)
 
     def _with_events(self, job: dict[str, Any]) -> dict[str, Any]:
-        job["events"] = self.list_job_events(job["id"])
+        events = self.list_job_events(job["id"])
+        if not events:
+            events = [
+                {
+                    "id": 0,
+                    "job_id": job["id"],
+                    "stage": job.get("stage", "queued"),
+                    "progress": int(job.get("progress") or 0),
+                    "message": _fallback_event_message(job),
+                    "details": {"source_type": job.get("source_type"), "mode": job.get("mode")},
+                    "created_at": job.get("updated_at") or job.get("created_at"),
+                }
+            ]
+        job["events"] = events
         return job
 
     @staticmethod
@@ -310,3 +323,13 @@ class Database:
         data = dict(row)
         data["request"] = json.loads(data.pop("request_json") or "{}")
         return data
+
+
+def _fallback_event_message(job: dict[str, Any]) -> str:
+    status = str(job.get("status") or "queued")
+    stage = str(job.get("stage") or status)
+    if status == "completed":
+        return "Job completed. Detailed timeline was not recorded for this job."
+    if status == "failed":
+        return str(job.get("error_message") or "Job failed. Detailed timeline was not recorded for this job.")
+    return f"Job is {status} at {stage}. Detailed timeline has not been recorded yet."

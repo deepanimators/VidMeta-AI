@@ -81,3 +81,32 @@ def test_job_events_are_returned(tmp_path, monkeypatch):
     assert len(job["events"]) == 2
     assert job["events"][-1]["message"] == "Extracted frames"
     assert job["events"][-1]["details"]["frame_count"] == 6
+
+
+def test_job_without_events_gets_fallback_event(tmp_path, monkeypatch):
+    monkeypatch.setenv("VIDMETA_DATABASE", str(tmp_path / "vidmeta.db"))
+    monkeypatch.setenv("VIDMETA_DATA_DIR", str(tmp_path / "data"))
+
+    from vidmeta.service.database import Database
+
+    db = Database()
+    db.create_job(
+        {
+            "id": "job-2",
+            "source_type": "upload",
+            "source_path": str(tmp_path / "video.mp4"),
+            "mode": "single",
+            "status": "completed",
+            "stage": "completed",
+            "progress": 100,
+            "request": {},
+        }
+    )
+    with db.connect() as conn:
+        conn.execute("DELETE FROM job_events WHERE job_id = ?", ("job-2",))
+
+    job = db.get_job("job-2")
+    assert job is not None
+    assert len(job["events"]) == 1
+    assert job["events"][0]["stage"] == "completed"
+    assert "Detailed timeline was not recorded" in job["events"][0]["message"]

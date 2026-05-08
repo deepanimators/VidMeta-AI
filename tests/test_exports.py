@@ -73,3 +73,27 @@ def test_parse_metadata_normalizes_platforms_map():
     assert result.platforms["reddit"].title == "Reddit discussion"
     assert result.platforms["threads"].title == "Thread starter"
     assert sorted(result.platforms.keys()) == ["reddit", "threads"]
+
+
+def test_parse_metadata_limits_to_target_platforms_and_maps_legacy_keys():
+    result = parse_metadata(
+        """
+        {
+          "video_summary": "A product video.",
+          "youtube": {"title": "Main YouTube title"},
+          "instagram": {"title": "Instagram caption"},
+          "telegram": {"title": "Telegram post"}
+        }
+        """,
+        target_platforms=["youtube", "youtube_shorts", "instagram_reels", "telegram_channels"],
+    )
+    assert sorted(result.platforms.keys()) == [
+        "instagram_reels",
+        "telegram_channels",
+        "youtube",
+        "youtube_shorts",
+    ]
+    assert result.platforms["youtube"].title == "Main YouTube title"
+    assert result.platforms["youtube_shorts"].title == "Main YouTube title"
+    assert result.platforms["instagram_reels"].title == "Instagram caption"
+    assert result.platforms["telegram_channels"].title == "Telegram post"

@@ -786,7 +786,32 @@ button:disabled {
 }
 
 .platform-card h3 {
-  margin: 0 0 10px;
+  margin: 0;
+}
+
+.platform-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.platform-downloads {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.platform-downloads button {
+  min-height: 30px;
+  padding: 0 8px;
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .platform-card label {

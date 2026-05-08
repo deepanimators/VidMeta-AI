@@ -279,6 +279,13 @@ function App() {
     () => jobs.find((job) => job.id === selectedJobId) ?? jobs[0],
     [jobs, selectedJobId]
   );
+  const selectedJobDetails = React.useMemo(() => {
+    if (!selectedJob) return undefined;
+    if (result?.id === selectedJob.id && result.events?.length) {
+      return { ...selectedJob, events: result.events };
+    }
+    return selectedJob;
+  }, [result, selectedJob]);
 
   React.useEffect(() => {
     void refresh();
@@ -639,7 +646,7 @@ function App() {
             ))}
             {!jobs.length && <p className="muted">No jobs yet.</p>}
           </div>
-          {selectedJob && <JobProgressDetails job={selectedJob} />}
+          {selectedJobDetails && <JobProgressDetails job={selectedJobDetails} />}
         </section>
 
         {selectedJob && (
@@ -945,7 +952,10 @@ function MetadataView({ metadata, analysis, transcript }: { metadata: Record<str
         {platforms.map(({ key, label, data }) => {
           return (
             <article className="platform-card" key={key}>
-              <h3>{label}</h3>
+              <div className="platform-card-head">
+                <h3>{label}</h3>
+                <PlatformDownloadButtons platformKey={key} label={label} data={data} />
+              </div>
               <label>Title<textarea readOnly value={String(data.title ?? "")} /></label>
               <label>Description<textarea readOnly value={String(data.description ?? "")} /></label>
               <label>Hashtags<textarea readOnly value={Array.isArray(data.hashtags) ? data.hashtags.join(" ") : String(data.hashtags ?? "")} /></label>
@@ -961,6 +971,33 @@ function MetadataView({ metadata, analysis, transcript }: { metadata: Record<str
         <pre>{analysis}</pre>
         <pre>{transcript}</pre>
       </details>
+    </div>
+  );
+}
+
+function PlatformDownloadButtons({
+  platformKey,
+  label,
+  data
+}: {
+  platformKey: string;
+  label: string;
+  data: Record<string, unknown>;
+}) {
+  return (
+    <div className="platform-downloads" aria-label={`${label} downloads`}>
+      {(["json", "csv", "txt"] as const).map((format) => (
+        <button
+          type="button"
+          key={format}
+          onClick={() => downloadPlatform(platformKey, label, data, format)}
+          title={`Download ${label} ${format.toUpperCase()}`}
+          aria-label={`Download ${label} ${format.toUpperCase()}`}
+        >
+          <Download size={13} />
+          {format.toUpperCase()}
+        </button>
+      ))}
     </div>
   );
 }
@@ -994,6 +1031,69 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function platformLabel(key: string) {
   return PLATFORM_LABELS[key] ?? titleize(key);
+}
+
+function downloadPlatform(
+  platformKey: string,
+  label: string,
+  data: Record<string, unknown>,
+  format: "json" | "csv" | "txt"
+) {
+  const filename = `vidmeta-${slugify(label || platformKey)}.${format}`;
+  const content = platformExportContent(platformKey, label, data, format);
+  const type = format === "json" ? "application/json" : format === "csv" ? "text/csv" : "text/plain";
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function platformExportContent(
+  platformKey: string,
+  label: string,
+  data: Record<string, unknown>,
+  format: "json" | "csv" | "txt"
+) {
+  if (format === "json") {
+    return JSON.stringify({ platform: platformKey, label, ...data }, null, 2);
+  }
+  if (format === "csv") {
+    const row = [
+      label,
+      data.title ?? "",
+      data.description ?? "",
+      Array.isArray(data.hashtags) ? data.hashtags.join(" ") : data.hashtags ?? "",
+      Array.isArray(data.keywords) ? data.keywords.join(", ") : data.keywords ?? "",
+      data.cta ?? "",
+      data.posting_tip ?? ""
+    ];
+    return `Platform,Title,Description,Hashtags,Keywords,CTA,Posting Tip\n${row.map(csvCell).join(",")}\n`;
+  }
+  const hashtags = Array.isArray(data.hashtags) ? data.hashtags.join(" ") : String(data.hashtags ?? "");
+  const keywords = Array.isArray(data.keywords) ? data.keywords.join(", ") : String(data.keywords ?? "");
+  return [
+    label,
+    "",
+    `TITLE:\n${String(data.title ?? "")}`,
+    `DESCRIPTION:\n${String(data.description ?? "")}`,
+    `HASHTAGS:\n${hashtags}`,
+    `KEYWORDS:\n${keywords}`,
+    `CTA:\n${String(data.cta ?? "")}`,
+    `POSTING TIP:\n${String(data.posting_tip ?? "")}`
+  ].join("\n\n");
+}
+
+function csvCell(value: unknown) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "platform";
 }
 
 function stageLabel(stage: string) {
