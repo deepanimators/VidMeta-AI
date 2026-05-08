@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from vidmeta.ai.schemas import PLATFORMS
 from vidmeta.settings import BrandContext, ProviderSettings, VideoSettings
 
 
@@ -11,12 +12,14 @@ class JobRequest(BaseModel):
     brand_context: BrandContext = Field(default_factory=BrandContext)
     video_settings: VideoSettings = Field(default_factory=VideoSettings)
     provider_settings: ProviderSettings = Field(default_factory=ProviderSettings)
+    target_platforms: list[str] = Field(default_factory=lambda: list(PLATFORMS))
 
 
 class UploadJobRequest(BaseModel):
     brand_context: BrandContext = Field(default_factory=BrandContext)
     video_settings: VideoSettings = Field(default_factory=VideoSettings)
     provider_settings: ProviderSettings = Field(default_factory=ProviderSettings)
+    target_platforms: list[str] = Field(default_factory=lambda: list(PLATFORMS))
 
 
 class CreateResumableUploadRequest(BaseModel):

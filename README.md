@@ -1,6 +1,6 @@
 # VidMeta AI
 
-VidMeta AI is a local-first AI video metadata service. It analyzes local videos and generates platform-ready titles, descriptions, hashtags, keywords, CTAs, and posting tips for YouTube, Instagram, Facebook, TikTok, and LinkedIn.
+VidMeta AI is a local-first AI video metadata service. It analyzes local videos and generates platform-ready titles, descriptions, hashtags, keywords, CTAs, and posting tips for selected social platforms across major video, social, community, publishing, and regional networks.
 
 The supported runtime is now:
 
@@ -84,6 +84,14 @@ The desktop shell uses the same React dashboard and enables native file/folder p
 
 The current desktop implementation expects the FastAPI service to be running separately. Bundling the service as a Tauri sidecar is the next packaging step.
 
+Installer builds:
+
+```bash
+npm run build:mac
+npm run build:windows
+npm run build:linux
+```
+
 ## Docker
 
 ```bash
@@ -132,6 +140,7 @@ This is not the supported runtime.
 - [Deployment](docs/DEPLOYMENT.md)
 - [Database schema](docs/schema.sql)
 - [Production checklist](docs/PRODUCTION_CHECKLIST.md)
+- [Windows trusted installation](docs/WINDOWS_TRUSTED_INSTALLATION.md)
 
 ## License
 

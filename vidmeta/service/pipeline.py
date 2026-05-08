@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from vidmeta.ai.output import parse_metadata
-from vidmeta.ai.prompts import ANALYSIS_PROMPT, METADATA_PROMPT, PLATFORM_JSON_TEMPLATE, PLATFORM_REQUIREMENTS
+from vidmeta.ai.prompts import ANALYSIS_PROMPT, METADATA_PROMPT, normalize_platforms, platform_json_template, platform_requirements
 from vidmeta.ai.providers import ProviderConfig, call_llm
 from vidmeta.settings import BrandContext, ProviderSettings, VideoSettings
 from vidmeta.video.frames import extract_frames
@@ -16,9 +16,11 @@ def analyze_video(
     brand: BrandContext,
     video: VideoSettings,
     provider: ProviderSettings,
+    target_platforms: list[str] | None = None,
     progress: Callable[[str, int, str, dict[str, Any] | None], None] | None = None,
 ) -> dict:
     file_path = str(Path(path).expanduser())
+    selected_platforms = normalize_platforms(target_platforms)
 
     _progress(progress, "frames", 10, "Extracting representative video frames")
     frames = extract_frames(file_path, video.frame_interval, video.max_frames)
@@ -85,8 +87,8 @@ def analyze_video(
         progress,
         "metadata",
         82,
-        "Generating metadata for all configured social platforms",
-        {"provider": provider.provider, "model": provider.model},
+        f"Generating metadata for {len(selected_platforms)} selected social platform profiles",
+        {"provider": provider.provider, "model": provider.model, "platforms": selected_platforms},
     )
     metadata_prompt = METADATA_PROMPT.format(
         analysis=analysis,
@@ -94,8 +96,8 @@ def analyze_video(
         brand_niche=brand.brand_niche,
         target_audience=brand.target_audience,
         tone=brand.tone,
-        platform_requirements=PLATFORM_REQUIREMENTS,
-        platform_json_template=PLATFORM_JSON_TEMPLATE,
+        platform_requirements=platform_requirements(selected_platforms),
+        platform_json_template=platform_json_template(selected_platforms),
     )
     raw_metadata = call_llm([], metadata_prompt, provider_config)
     metadata = parse_metadata(raw_metadata)

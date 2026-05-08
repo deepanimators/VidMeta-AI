@@ -26,6 +26,18 @@ GET  /api/jobs/{job_id}/exports/{format}
 
 `from-path` accepts a file or folder path. Folder paths run as batch jobs.
 
+Job creation accepts `target_platforms`, an array of platform keys. The AI prompt and saved result are limited to those selected platforms. If omitted, the service defaults to all supported platform keys.
+
+Example:
+
+```json
+{
+  "path": "/Users/you/Videos/product-demo.mp4",
+  "mode": "single",
+  "target_platforms": ["youtube", "instagram_reels", "tiktok"]
+}
+```
+
 Job statuses:
 
 - `queued`

@@ -104,7 +104,7 @@ def _platform_entries(metadata: dict[str, Any]) -> list[tuple[str, dict[str, Any
     entries: list[tuple[str, dict[str, Any]]] = []
     seen: set[str] = set()
     for platform in PLATFORMS:
-        data = source.get(platform, {}) if isinstance(source, dict) else {}
+        data = source.get(platform) if isinstance(source, dict) else None
         if isinstance(data, dict):
             entries.append((platform, data))
             seen.add(platform)

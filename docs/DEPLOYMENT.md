@@ -28,6 +28,18 @@ cd web && npm install
 cd ../desktop && npm install && npm run dev
 ```
 
+## Desktop Installer Builds
+
+Run installer builds from `desktop/` on the target operating system:
+
+```bash
+npm run build:mac
+npm run build:windows
+npm run build:linux
+```
+
+Windows signing and trusted private installation steps are documented in `docs/WINDOWS_TRUSTED_INSTALLATION.md`.
+
 ## Docker
 
 ```bash

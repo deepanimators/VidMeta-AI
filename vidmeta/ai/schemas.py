@@ -69,16 +69,14 @@ class MetadataResult(BaseModel):
         payload = dict(data)
         source_platforms = payload.get("platforms") if isinstance(payload.get("platforms"), dict) else {}
         normalized: dict[str, Any] = {}
-        for platform in PLATFORMS:
-            if isinstance(source_platforms.get(platform), dict):
-                normalized[platform] = source_platforms[platform]
-            elif isinstance(payload.get(platform), dict):
-                normalized[platform] = payload[platform]
-            else:
-                normalized[platform] = {}
-        for key, value in source_platforms.items():
-            if key not in normalized and isinstance(value, dict):
-                normalized[key] = value
+        if source_platforms:
+            for key, value in source_platforms.items():
+                if isinstance(value, dict):
+                    normalized[key] = value
+        else:
+            for platform in PLATFORMS:
+                if isinstance(payload.get(platform), dict):
+                    normalized[platform] = payload[platform]
         payload["platforms"] = normalized
         payload["raw"] = raw
         return cls.model_validate(payload)

@@ -1,12 +1,22 @@
+from collections.abc import Sequence
+
 from vidmeta.ai.schemas import PLATFORM_LABELS, PLATFORMS
 
 
-PLATFORM_REQUIREMENTS = "\n".join(
-    f"- {key}: optimized metadata for {PLATFORM_LABELS[key]}" for key in PLATFORMS
-)
+def normalize_platforms(platforms: Sequence[str] | None = None) -> list[str]:
+    selected = [platform for platform in (platforms or PLATFORMS) if platform in PLATFORM_LABELS]
+    return selected or list(PLATFORMS)
 
-PLATFORM_JSON_TEMPLATE = ",\n".join(
-    f'''    "{key}": {{
+
+def platform_requirements(platforms: Sequence[str] | None = None) -> str:
+    return "\n".join(
+        f"- {key}: optimized metadata for {PLATFORM_LABELS[key]}" for key in normalize_platforms(platforms)
+    )
+
+
+def platform_json_template(platforms: Sequence[str] | None = None) -> str:
+    return ",\n".join(
+        f'''    "{key}": {{
       "title": "Platform-native hook/title",
       "description": "Platform-native caption or description",
       "hashtags": ["#tag1", "#tag2", "#tag3"],
@@ -14,8 +24,12 @@ PLATFORM_JSON_TEMPLATE = ",\n".join(
       "cta": "Platform-native call to action",
       "posting_tip": "Best format/timing/content tip for {PLATFORM_LABELS[key]}"
     }}'''
-    for key in PLATFORMS
-)
+        for key in normalize_platforms(platforms)
+    )
+
+
+PLATFORM_REQUIREMENTS = platform_requirements()
+PLATFORM_JSON_TEMPLATE = platform_json_template()
 
 
 ANALYSIS_PROMPT = """You are a content strategist analyzing a video for a social media brand.

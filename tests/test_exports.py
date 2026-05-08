@@ -72,3 +72,4 @@ def test_parse_metadata_normalizes_platforms_map():
     )
     assert result.platforms["reddit"].title == "Reddit discussion"
     assert result.platforms["threads"].title == "Thread starter"
+    assert sorted(result.platforms.keys()) == ["reddit", "threads"]

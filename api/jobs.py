@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
+from vidmeta.ai.prompts import normalize_platforms
 from vidmeta.service.database import Database
 from vidmeta.service.pipeline import analyze_video
 from vidmeta.settings import VIDEO_EXTENSIONS, AppSettings, BrandContext, ProviderSettings, VideoSettings
@@ -95,6 +96,7 @@ class JobRunner:
             brand = request.get("brand_context") or settings.brand_context.model_dump()
             video = request.get("video_settings") or settings.video_settings.model_dump()
             provider = request.get("provider_settings") or settings.provider_settings.model_dump()
+            target_platforms = normalize_platforms(request.get("target_platforms"))
 
             def progress(
                 stage: str,
@@ -113,6 +115,7 @@ class JobRunner:
                     brand_model,
                     video_model,
                     provider_model,
+                    target_platforms,
                     progress,
                 )
             else:
@@ -121,6 +124,7 @@ class JobRunner:
                     brand=brand_model,
                     video=video_model,
                     provider=provider_model,
+                    target_platforms=target_platforms,
                     progress=progress,
                 )
             self.db.save_result(
@@ -166,6 +170,7 @@ class JobRunner:
         brand: BrandContext,
         video: VideoSettings,
         provider: ProviderSettings,
+        target_platforms: list[str],
         progress: Callable[[str, int, str, dict[str, Any] | None], None],
     ) -> dict[str, Any]:
         files = self._video_files(Path(folder))
@@ -214,6 +219,7 @@ class JobRunner:
                 brand=brand,
                 video=video,
                 provider=provider,
+                target_platforms=target_platforms,
                 progress=batch_progress,
             )
             transcripts.append(f"## {path.name}\n{item['transcript']}")

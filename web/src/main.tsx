@@ -12,7 +12,8 @@ import {
   Save,
   Settings,
   UploadCloud,
-  Video
+  Video,
+  X as XIcon
 } from "lucide-react";
 import "./styles.css";
 
@@ -92,47 +93,91 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 const CUSTOM_MODEL_VALUE = "__custom__";
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm", "m4v"]);
 
-const SOCIAL_PLATFORMS = [
-  { key: "youtube", label: "YouTube" },
-  { key: "youtube_shorts", label: "YouTube Shorts" },
-  { key: "instagram_reels", label: "Instagram Reels" },
-  { key: "instagram_feed", label: "Instagram Feed" },
-  { key: "facebook", label: "Facebook" },
-  { key: "facebook_reels", label: "Facebook Reels" },
-  { key: "tiktok", label: "TikTok" },
-  { key: "linkedin", label: "LinkedIn" },
-  { key: "x", label: "X / Twitter" },
-  { key: "threads", label: "Threads" },
-  { key: "bluesky", label: "Bluesky" },
-  { key: "mastodon", label: "Mastodon" },
-  { key: "pinterest", label: "Pinterest" },
-  { key: "snapchat_spotlight", label: "Snapchat Spotlight" },
-  { key: "reddit", label: "Reddit" },
-  { key: "whatsapp_channels", label: "WhatsApp Channels" },
-  { key: "telegram_channels", label: "Telegram Channels" },
-  { key: "discord", label: "Discord" },
-  { key: "tumblr", label: "Tumblr" },
-  { key: "medium", label: "Medium" },
-  { key: "quora", label: "Quora" },
-  { key: "substack_notes", label: "Substack Notes" },
-  { key: "twitch", label: "Twitch" },
-  { key: "vimeo", label: "Vimeo" },
-  { key: "rumble", label: "Rumble" },
-  { key: "dailymotion", label: "Dailymotion" },
-  { key: "wechat_channels", label: "WeChat Channels" },
-  { key: "douyin", label: "Douyin" },
-  { key: "kuaishou", label: "Kuaishou" },
-  { key: "bilibili", label: "Bilibili" },
-  { key: "weibo", label: "Weibo" },
-  { key: "vk", label: "VK" },
-  { key: "line_voom", label: "LINE VOOM" },
-  { key: "lemon8", label: "Lemon8" },
-  { key: "sharechat", label: "ShareChat" },
-  { key: "moj", label: "Moj" },
-  { key: "josh", label: "Josh" }
+type SocialPlatform = {
+  key: string;
+  label: string;
+  short: string;
+};
+
+type SocialPlatformGroup = {
+  title: string;
+  platforms: readonly SocialPlatform[];
+};
+
+const SOCIAL_PLATFORM_GROUPS: readonly SocialPlatformGroup[] = [
+  {
+    title: "Core video networks",
+    platforms: [
+      { key: "youtube", label: "YouTube", short: "YT" },
+      { key: "youtube_shorts", label: "YouTube Shorts", short: "YS" },
+      { key: "instagram_reels", label: "Instagram Reels", short: "IR" },
+      { key: "instagram_feed", label: "Instagram Feed", short: "IF" },
+      { key: "facebook", label: "Facebook", short: "FB" },
+      { key: "facebook_reels", label: "Facebook Reels", short: "FR" },
+      { key: "tiktok", label: "TikTok", short: "TT" },
+      { key: "linkedin", label: "LinkedIn", short: "IN" }
+    ]
+  },
+  {
+    title: "Social conversation",
+    platforms: [
+      { key: "x", label: "X / Twitter", short: "X" },
+      { key: "threads", label: "Threads", short: "TH" },
+      { key: "bluesky", label: "Bluesky", short: "BS" },
+      { key: "mastodon", label: "Mastodon", short: "MA" },
+      { key: "reddit", label: "Reddit", short: "RD" },
+      { key: "quora", label: "Quora", short: "QU" }
+    ]
+  },
+  {
+    title: "Messaging and communities",
+    platforms: [
+      { key: "whatsapp_channels", label: "WhatsApp Channels", short: "WA" },
+      { key: "telegram_channels", label: "Telegram Channels", short: "TG" },
+      { key: "discord", label: "Discord", short: "DC" },
+      { key: "line_voom", label: "LINE VOOM", short: "LV" }
+    ]
+  },
+  {
+    title: "Visual discovery",
+    platforms: [
+      { key: "pinterest", label: "Pinterest", short: "PI" },
+      { key: "snapchat_spotlight", label: "Snapchat Spotlight", short: "SC" },
+      { key: "lemon8", label: "Lemon8", short: "L8" },
+      { key: "tumblr", label: "Tumblr", short: "TB" }
+    ]
+  },
+  {
+    title: "Publishing and long-form",
+    platforms: [
+      { key: "medium", label: "Medium", short: "MD" },
+      { key: "substack_notes", label: "Substack Notes", short: "SN" },
+      { key: "twitch", label: "Twitch", short: "TW" },
+      { key: "vimeo", label: "Vimeo", short: "VM" },
+      { key: "rumble", label: "Rumble", short: "RU" },
+      { key: "dailymotion", label: "Dailymotion", short: "DM" }
+    ]
+  },
+  {
+    title: "Regional high-scale networks",
+    platforms: [
+      { key: "wechat_channels", label: "WeChat Channels", short: "WC" },
+      { key: "douyin", label: "Douyin", short: "DY" },
+      { key: "kuaishou", label: "Kuaishou", short: "KS" },
+      { key: "bilibili", label: "Bilibili", short: "BB" },
+      { key: "weibo", label: "Weibo", short: "WB" },
+      { key: "vk", label: "VK", short: "VK" },
+      { key: "sharechat", label: "ShareChat", short: "SH" },
+      { key: "moj", label: "Moj", short: "MJ" },
+      { key: "josh", label: "Josh", short: "JO" }
+    ]
+  }
 ] as const;
 
+const SOCIAL_PLATFORMS = SOCIAL_PLATFORM_GROUPS.flatMap((group) => group.platforms);
 const PLATFORM_LABELS = Object.fromEntries(SOCIAL_PLATFORMS.map((platform) => [platform.key, platform.label]));
+const PLATFORM_BY_KEY = Object.fromEntries(SOCIAL_PLATFORMS.map((platform) => [platform.key, platform])) as Record<string, SocialPlatform>;
+const CORE_PLATFORM_KEYS = SOCIAL_PLATFORM_GROUPS[0].platforms.map((platform) => platform.key);
 
 const MODEL_PRESETS: Record<string, { label: string; value: string; note?: string }[]> = {
   ollama: [
@@ -222,6 +267,7 @@ function App() {
   const [result, setResult] = React.useState<JobResult | null>(null);
   const [path, setPath] = React.useState("");
   const [uploadFiles, setUploadFiles] = React.useState<File[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = React.useState<string[]>(() => [...CORE_PLATFORM_KEYS]);
   const [desktopPickerAvailable, setDesktopPickerAvailable] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -298,6 +344,10 @@ function App() {
       setMessage("Enter a local file or folder path");
       return;
     }
+    if (!selectedPlatforms.length) {
+      setMessage("Select at least one social platform");
+      return;
+    }
     setBusy(true);
     try {
       const job = await api<Job>("/api/jobs/from-path", {
@@ -307,7 +357,8 @@ function App() {
           mode: "single",
           brand_context: settings.brand_context,
           video_settings: settings.video_settings,
-          provider_settings: settings.provider_settings
+          provider_settings: settings.provider_settings,
+          target_platforms: selectedPlatforms
         })
       });
       setSelectedJobId(job.id);
@@ -355,6 +406,10 @@ function App() {
       setMessage("Choose one or more video files");
       return;
     }
+    if (!selectedPlatforms.length) {
+      setMessage("Select at least one social platform");
+      return;
+    }
     setBusy(true);
     setUploadProgress(0);
     try {
@@ -393,7 +448,8 @@ function App() {
       body: JSON.stringify({
         brand_context: settings.brand_context,
         video_settings: settings.video_settings,
-        provider_settings: settings.provider_settings
+        provider_settings: settings.provider_settings,
+        target_platforms: selectedPlatforms
       })
     });
   }
@@ -501,63 +557,71 @@ function App() {
         <header className="topbar">
           <div>
             <h2>Generate platform metadata</h2>
-            <p>Use local paths in desktop/local mode for videos that should never pass through browser upload.</p>
+            <p>
+              {desktopPickerAvailable
+                ? "Desktop mode uses real local paths for fast no-upload processing."
+                : "Web mode uses resumable uploads and only shows upload controls."}
+            </p>
           </div>
           <div className="status-pill">{message || "Service ready"}</div>
         </header>
 
-        <div className="grid">
-          <section className="panel main-card">
-            <h2><FolderOpen size={19} /> Local path or folder</h2>
-            <p className="mode-note">
-              {desktopPickerAvailable
-                ? "VidMeta AI Desktop can pass real local paths to the service."
-                : "Web browsers cannot expose real local paths. Use the picker to upload, or paste a path when the API runs on this machine."}
-            </p>
-            <div className="path-row">
-              <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/Users/you/Videos/product-demo.mp4" />
-              <button className="icon-button" onClick={() => pickLocalSource("file")} title="Pick video file"><Video size={18} /></button>
-              <button className="icon-button" onClick={() => pickLocalSource("folder")} title="Pick video folder"><FolderOpen size={18} /></button>
-            </div>
-            <div className="form-grid">
-              <input value={settings.brand_context.brand_name} onChange={(event) => updateBrand("brand_name", event.target.value)} placeholder="Brand" />
-              <input value={settings.brand_context.brand_niche} onChange={(event) => updateBrand("brand_niche", event.target.value)} placeholder="Niche" />
-              <input value={settings.brand_context.target_audience} onChange={(event) => updateBrand("target_audience", event.target.value)} placeholder="Audience" />
-              <input value={settings.brand_context.tone} onChange={(event) => updateBrand("tone", event.target.value)} placeholder="Tone" />
-            </div>
-            <div className="controls-row">
-              <label>Frame interval <input type="number" min={1} max={120} value={settings.video_settings.frame_interval} onChange={(event) => updateVideo("frame_interval", Number(event.target.value))} /></label>
-              <label>Max frames <input type="number" min={1} max={60} value={settings.video_settings.max_frames} onChange={(event) => updateVideo("max_frames", Number(event.target.value))} /></label>
-              <label>Whisper <input type="checkbox" checked={settings.video_settings.use_whisper} onChange={(event) => updateVideo("use_whisper", event.target.checked)} /></label>
-            </div>
-            <button className="primary" onClick={createPathJob} disabled={busy}><Play size={17} /> Analyze local path</button>
-          </section>
-
-          <section className="panel main-card">
-            <h2><UploadCloud size={19} /> Resumable browser upload</h2>
-            <input
-              ref={browserFilePickerRef}
-              className="file-input"
-              type="file"
-              accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
-              multiple
-              onChange={(event) => handleBrowserFiles(event.target.files)}
-            />
-            <input
-              ref={browserFolderPickerRef}
-              className="hidden-input"
-              type="file"
-              accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
-              multiple
-              onChange={(event) => handleBrowserFiles(event.target.files)}
-            />
-            {uploadFiles.length > 0 && (
-              <p className="selected-files">{uploadFiles.length} selected: {uploadFiles.slice(0, 2).map((file) => file.name).join(", ")}{uploadFiles.length > 2 ? "..." : ""}</p>
-            )}
-            <p className="muted">Use this when the browser and backend are on different machines. For local desktop files, path mode is faster and avoids upload limits.</p>
-            {uploadProgress > 0 && <div className="progress"><span style={{ width: `${uploadProgress}%` }} /></div>}
-            <button className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length}><UploadCloud size={17} /> Upload and analyze</button>
-          </section>
+        <div className="source-grid">
+          {desktopPickerAvailable ? (
+            <section className="panel main-card">
+              <h2><FolderOpen size={19} /> Local path or folder</h2>
+              <p className="mode-note">VidMeta AI Desktop passes native file and folder paths to the local service.</p>
+              <div className="path-row">
+                <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/Users/you/Videos/product-demo.mp4" />
+                <button className="icon-button" onClick={() => pickLocalSource("file")} title="Pick video file"><Video size={18} /></button>
+                <button className="icon-button" onClick={() => pickLocalSource("folder")} title="Pick video folder"><FolderOpen size={18} /></button>
+              </div>
+              <JobConfiguration
+                settings={settings}
+                selectedPlatforms={selectedPlatforms}
+                onBrandChange={updateBrand}
+                onVideoChange={updateVideo}
+                onSelectedPlatformsChange={setSelectedPlatforms}
+              />
+              <button className="primary" onClick={createPathJob} disabled={busy || !selectedPlatforms.length}><Play size={17} /> Analyze local path</button>
+            </section>
+          ) : (
+            <section className="panel main-card">
+              <h2><UploadCloud size={19} /> Resumable browser upload</h2>
+              <input
+                ref={browserFilePickerRef}
+                className="hidden-input"
+                type="file"
+                accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
+                multiple
+                onChange={(event) => handleBrowserFiles(event.target.files)}
+              />
+              <input
+                ref={browserFolderPickerRef}
+                className="hidden-input"
+                type="file"
+                accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
+                multiple
+                onChange={(event) => handleBrowserFiles(event.target.files)}
+              />
+              <div className="upload-picker">
+                <button className="secondary action-button" onClick={() => browserFilePickerRef.current?.click()}><Video size={17} /> Select videos</button>
+                <button className="secondary action-button" onClick={() => browserFolderPickerRef.current?.click()}><FolderOpen size={17} /> Select folder</button>
+              </div>
+              {uploadFiles.length > 0 && (
+                <p className="selected-files">{uploadFiles.length} selected: {uploadFiles.slice(0, 2).map((file) => file.name).join(", ")}{uploadFiles.length > 2 ? "..." : ""}</p>
+              )}
+              <JobConfiguration
+                settings={settings}
+                selectedPlatforms={selectedPlatforms}
+                onBrandChange={updateBrand}
+                onVideoChange={updateVideo}
+                onSelectedPlatformsChange={setSelectedPlatforms}
+              />
+              {uploadProgress > 0 && <div className="progress"><span style={{ width: `${uploadProgress}%` }} /></div>}
+              <button className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length || !selectedPlatforms.length}><UploadCloud size={17} /> Upload and analyze</button>
+            </section>
+          )}
         </div>
 
         <section className="panel">
@@ -637,6 +701,151 @@ function App() {
     setUploadProgress(0);
     setMessage(files.length ? `${files.length} video file${files.length === 1 ? "" : "s"} selected` : "No supported video files selected");
   }
+}
+
+type JobConfigurationProps = {
+  settings: AppSettings;
+  selectedPlatforms: string[];
+  onBrandChange: <K extends keyof BrandContext>(key: K, value: BrandContext[K]) => void;
+  onVideoChange: <K extends keyof VideoSettings>(key: K, value: VideoSettings[K]) => void;
+  onSelectedPlatformsChange: React.Dispatch<React.SetStateAction<string[]>>;
+};
+
+function JobConfiguration({
+  settings,
+  selectedPlatforms,
+  onBrandChange,
+  onVideoChange,
+  onSelectedPlatformsChange
+}: JobConfigurationProps) {
+  return (
+    <div className="job-config">
+      <div className="form-grid">
+        <input value={settings.brand_context.brand_name} onChange={(event) => onBrandChange("brand_name", event.target.value)} placeholder="Brand" />
+        <input value={settings.brand_context.brand_niche} onChange={(event) => onBrandChange("brand_niche", event.target.value)} placeholder="Niche" />
+        <input value={settings.brand_context.target_audience} onChange={(event) => onBrandChange("target_audience", event.target.value)} placeholder="Audience" />
+        <input value={settings.brand_context.tone} onChange={(event) => onBrandChange("tone", event.target.value)} placeholder="Tone" />
+      </div>
+      <div className="controls-row">
+        <label>Frame interval <input type="number" min={1} max={120} value={settings.video_settings.frame_interval} onChange={(event) => onVideoChange("frame_interval", Number(event.target.value))} /></label>
+        <label>Max frames <input type="number" min={1} max={60} value={settings.video_settings.max_frames} onChange={(event) => onVideoChange("max_frames", Number(event.target.value))} /></label>
+        <label>Whisper <input type="checkbox" checked={settings.video_settings.use_whisper} onChange={(event) => onVideoChange("use_whisper", event.target.checked)} /></label>
+      </div>
+      <PlatformPicker selected={selectedPlatforms} onChange={onSelectedPlatformsChange} />
+    </div>
+  );
+}
+
+function PlatformPicker({
+  selected,
+  onChange
+}: {
+  selected: string[];
+  onChange: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const selectedSet = React.useMemo(() => new Set(selected), [selected]);
+  const allPlatformKeys = React.useMemo(() => SOCIAL_PLATFORMS.map((platform) => platform.key), []);
+  const [activeGroupIndex, setActiveGroupIndex] = React.useState(0);
+  const activeGroup = SOCIAL_PLATFORM_GROUPS[activeGroupIndex] ?? SOCIAL_PLATFORM_GROUPS[0];
+  const selectedPlatforms = selected.map((key) => PLATFORM_BY_KEY[key]).filter(Boolean);
+
+  function setCorePlatforms() {
+    onChange([...CORE_PLATFORM_KEYS]);
+  }
+
+  function setAllPlatforms() {
+    onChange([...allPlatformKeys]);
+  }
+
+  function clearPlatforms() {
+    onChange([]);
+  }
+
+  function togglePlatform(platformKey: string) {
+    onChange((current) => {
+      if (current.includes(platformKey)) {
+        return current.filter((key) => key !== platformKey);
+      }
+      return [...current, platformKey];
+    });
+  }
+
+  function selectedCountForGroup(group: SocialPlatformGroup) {
+    return group.platforms.filter((platform) => selectedSet.has(platform.key)).length;
+  }
+
+  return (
+    <div className="platform-picker">
+      <div className="platform-picker-head">
+        <div>
+          <span className="eyebrow">Destinations</span>
+          <strong>Choose social platforms</strong>
+          <span>{selected.length} selected for generation</span>
+        </div>
+        <div className="platform-actions">
+          <button type="button" className="mini-button" onClick={setCorePlatforms}>Core</button>
+          <button type="button" className="mini-button" onClick={setAllPlatforms}>All</button>
+          <button type="button" className="mini-button" onClick={clearPlatforms}>Clear</button>
+        </div>
+      </div>
+      <div className="selected-platforms" aria-label="Selected platforms">
+        {selectedPlatforms.length ? (
+          selectedPlatforms.map((platform) => (
+            <span className="selected-platform-chip" key={platform.key}>
+              <span className="platform-mark compact" aria-hidden="true">{platform.short}</span>
+              <span>{platform.label}</span>
+              <button type="button" onClick={() => togglePlatform(platform.key)} title={`Remove ${platform.label}`}>
+                <XIcon size={13} />
+              </button>
+            </span>
+          ))
+        ) : (
+          <span className="platform-empty">Select at least one destination before generating.</span>
+        )}
+      </div>
+      <div className="platform-tabs" role="tablist" aria-label="Platform groups">
+        {SOCIAL_PLATFORM_GROUPS.map((group, index) => {
+          const groupSelectedCount = selectedCountForGroup(group);
+          const isActive = index === activeGroupIndex;
+          return (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={`platform-tab ${isActive ? "active" : ""}`}
+              key={group.title}
+              onClick={() => setActiveGroupIndex(index)}
+            >
+              <span>{group.title}</span>
+              <em>{groupSelectedCount}/{group.platforms.length}</em>
+            </button>
+          );
+        })}
+      </div>
+      <fieldset className="platform-group">
+        <legend>{activeGroup.title}</legend>
+        <div className="platform-options">
+          {activeGroup.platforms.map((platform) => {
+            const checked = selectedSet.has(platform.key);
+            return (
+              <label className={`platform-option ${checked ? "selected" : ""}`} key={platform.key}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => togglePlatform(platform.key)}
+                />
+                <span className="platform-mark" aria-hidden="true">{platform.short}</span>
+                <span className="platform-option-name">{platform.label}</span>
+                <span className="option-check" aria-hidden="true">
+                  {checked ? <CheckCircle2 size={15} /> : null}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    </div>
+  );
 }
 
 function normalizeSettings(settings: AppSettings): AppSettings {

@@ -26,6 +26,11 @@
   "bundle": {
     "active": true,
     "targets": ["app"],
-    "icon": []
+    "icon": [],
+    "windows": {
+      "nsis": {
+        "installMode": "both"
+      }
+    }
   }
 }
