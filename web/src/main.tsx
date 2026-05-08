@@ -77,6 +77,43 @@ type JobResult = Job & {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const CUSTOM_MODEL_VALUE = "__custom__";
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm", "m4v"]);
+
+const MODEL_PRESETS: Record<string, { label: string; value: string; note?: string }[]> = {
+  ollama: [
+    { label: "Gemma 3 4B Vision", value: "gemma3:4b", note: "small local vision default" },
+    { label: "Gemma 3 12B Vision", value: "gemma3:12b" },
+    { label: "Llama 3.2 Vision 11B", value: "llama3.2-vision:11b" },
+    { label: "Llama 3.2 Vision", value: "llama3.2-vision" }
+  ],
+  openrouter: [
+    { label: "OpenRouter Auto", value: "openrouter/auto", note: "routes to an available model" },
+    { label: "Gemini 2.5 Flash", value: "google/gemini-2.5-flash" },
+    { label: "Claude Sonnet 4.5", value: "anthropic/claude-sonnet-4.5" },
+    { label: "GPT-5.4 Mini", value: "openai/gpt-5.4-mini" }
+  ],
+  openai: [
+    { label: "GPT-5.4 Mini", value: "gpt-5.4-mini", note: "balanced default" },
+    { label: "GPT-5.4", value: "gpt-5.4" },
+    { label: "GPT-5.4 Nano", value: "gpt-5.4-nano" },
+    { label: "GPT-5.5", value: "gpt-5.5" }
+  ],
+  anthropic: [
+    { label: "Claude Sonnet 4.5", value: "claude-sonnet-4-5-20250929", note: "balanced default" },
+    { label: "Claude Haiku 4.5", value: "claude-haiku-4-5-20251001" },
+    { label: "Claude Opus 4.1", value: "claude-opus-4-1-20250805" }
+  ],
+  gemini: [
+    { label: "Gemini 2.5 Flash", value: "gemini-2.5-flash", note: "fast metadata default" },
+    { label: "Gemini 2.5 Pro", value: "gemini-2.5-pro" },
+    { label: "Gemini 2.5 Flash-Lite", value: "gemini-2.5-flash-lite" }
+  ]
+};
+
+const DEFAULT_MODEL_BY_PROVIDER = Object.fromEntries(
+  Object.entries(MODEL_PRESETS).map(([provider, models]) => [provider, models[0]?.value ?? ""])
+) as Record<string, string>;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -107,7 +144,7 @@ const defaultSettings: AppSettings = {
   },
   provider_settings: {
     provider: "ollama",
-    model: "gemma4",
+    model: "gemma3:4b",
     api_key: "",
     api_base: "",
     ollama_url: "http://localhost:11434"
@@ -130,10 +167,13 @@ function App() {
   const [selectedJobId, setSelectedJobId] = React.useState("");
   const [result, setResult] = React.useState<JobResult | null>(null);
   const [path, setPath] = React.useState("");
-  const [uploadFile, setUploadFile] = React.useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = React.useState<File[]>([]);
+  const [desktopPickerAvailable, setDesktopPickerAvailable] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [uploadProgress, setUploadProgress] = React.useState(0);
+  const browserFilePickerRef = React.useRef<HTMLInputElement>(null);
+  const browserFolderPickerRef = React.useRef<HTMLInputElement>(null);
 
   const selectedJob = React.useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? jobs[0],
@@ -143,8 +183,14 @@ function App() {
   React.useEffect(() => {
     void refresh();
     void loadSettings();
+    void detectDesktopPicker();
     const timer = window.setInterval(refresh, 2500);
     return () => window.clearInterval(timer);
+  }, []);
+
+  React.useEffect(() => {
+    browserFolderPickerRef.current?.setAttribute("webkitdirectory", "");
+    browserFolderPickerRef.current?.setAttribute("directory", "");
   }, []);
 
   React.useEffect(() => {
@@ -155,10 +201,14 @@ function App() {
 
   async function loadSettings() {
     try {
-      setSettings(await api<AppSettings>("/api/settings"));
+      setSettings(normalizeSettings(await api<AppSettings>("/api/settings")));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not load settings");
     }
+  }
+
+  async function detectDesktopPicker() {
+    setDesktopPickerAvailable(await canUseDesktopDialog());
   }
 
   async function refresh() {
@@ -216,53 +266,82 @@ function App() {
     }
   }
 
-  async function pickWithTauri(kind: "file" | "folder") {
+  async function pickLocalSource(kind: "file" | "folder") {
     try {
-      const dialog = await import("@tauri-apps/plugin-dialog");
-      const picked = await dialog.open({
-        directory: kind === "folder",
-        multiple: false,
-        filters: kind === "file" ? [{ name: "Video", extensions: ["mp4", "mov", "avi", "mkv", "webm", "m4v"] }] : []
-      });
-      if (typeof picked === "string") setPath(picked);
-    } catch {
-      setMessage("Native picker is available in the Tauri desktop app.");
+      if (await canUseDesktopDialog()) {
+        const dialog = await import("@tauri-apps/plugin-dialog");
+        const picked = await dialog.open({
+          directory: kind === "folder",
+          multiple: false,
+          filters: kind === "file" ? [{ name: "Video", extensions: Array.from(VIDEO_EXTENSIONS) }] : []
+        });
+        if (typeof picked === "string") {
+          setPath(picked);
+          setMessage("Local path selected");
+        }
+        return;
+      }
+      if (kind === "file") {
+        browserFilePickerRef.current?.click();
+      } else {
+        browserFolderPickerRef.current?.click();
+      }
+      setMessage(
+        kind === "folder"
+          ? "Browser folder picker queues uploads. VidMeta AI Desktop is required for direct folder path processing."
+          : "Browser file picker queues an upload. VidMeta AI Desktop is required for direct path processing."
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not open picker");
     }
   }
 
   async function uploadAndRun() {
-    if (!uploadFile) {
-      setMessage("Choose a video file");
+    if (!uploadFiles.length) {
+      setMessage("Choose one or more video files");
       return;
     }
     setBusy(true);
     setUploadProgress(0);
     try {
-      const created = await api<{ id: string; upload_url: string }>("/api/uploads/resumable", {
-        method: "POST",
-        body: JSON.stringify({
-          filename: uploadFile.name,
-          content_type: uploadFile.type || "application/octet-stream",
-          size_bytes: uploadFile.size
-        })
-      });
-      await uploadResumable(created.upload_url, uploadFile, (value) => setUploadProgress(value));
-      const job = await api<Job>(`/api/jobs/from-upload/${created.id}`, {
-        method: "POST",
-        body: JSON.stringify({
-          brand_context: settings.brand_context,
-          video_settings: settings.video_settings,
-          provider_settings: settings.provider_settings
-        })
-      });
-      setSelectedJobId(job.id);
-      setMessage("Upload complete and job queued");
+      let lastJob: Job | null = null;
+      for (let index = 0; index < uploadFiles.length; index += 1) {
+        const file = uploadFiles[index];
+        setMessage(`Uploading ${index + 1} of ${uploadFiles.length}: ${file.name}`);
+        const job = await uploadOneFile(file, (value) => {
+          const completed = index / uploadFiles.length;
+          setUploadProgress(Math.round((completed + value / 100 / uploadFiles.length) * 100));
+        });
+        lastJob = job;
+      }
+      if (lastJob) setSelectedJobId(lastJob.id);
+      setMessage(`${uploadFiles.length} upload job${uploadFiles.length === 1 ? "" : "s"} queued`);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Upload failed");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function uploadOneFile(file: File, onProgress: (progress: number) => void) {
+    const created = await api<{ id: string; upload_url: string }>("/api/uploads/resumable", {
+      method: "POST",
+      body: JSON.stringify({
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        size_bytes: file.size
+      })
+    });
+    await uploadResumable(created.upload_url, file, onProgress);
+    return api<Job>(`/api/jobs/from-upload/${created.id}`, {
+      method: "POST",
+      body: JSON.stringify({
+        brand_context: settings.brand_context,
+        video_settings: settings.video_settings,
+        provider_settings: settings.provider_settings
+      })
+    });
   }
 
   async function loadResult(jobId: string) {
@@ -288,7 +367,7 @@ function App() {
           <h2><HardDrive size={18} /> Runtime</h2>
           <select value={settings.app_mode} onChange={(event) => updateSettings("app_mode", event.target.value)}>
             <option value="local">Local web</option>
-            <option value="desktop">Tauri desktop</option>
+            <option value="desktop">VidMeta AI Desktop</option>
             <option value="hosted">Private hosted</option>
           </select>
           {settings.app_mode === "hosted" && (
@@ -300,7 +379,7 @@ function App() {
           <h2><Settings size={18} /> Provider</h2>
           <select
             value={settings.provider_settings.provider}
-            onChange={(event) => updateProvider("provider", event.target.value)}
+            onChange={(event) => selectProvider(event.target.value)}
           >
             <option value="ollama">Ollama local</option>
             <option value="openrouter">OpenRouter</option>
@@ -308,11 +387,29 @@ function App() {
             <option value="anthropic">Anthropic</option>
             <option value="gemini">Gemini</option>
           </select>
-          <input value={settings.provider_settings.model} onChange={(event) => updateProvider("model", event.target.value)} placeholder="Model" />
+          <select
+            value={selectedModelValue(settings.provider_settings.provider, settings.provider_settings.model)}
+            onChange={(event) => selectModel(event.target.value)}
+          >
+            {(MODEL_PRESETS[settings.provider_settings.provider] ?? []).map((model) => (
+              <option value={model.value} key={model.value}>
+                {model.label}{model.note ? ` - ${model.note}` : ""}
+              </option>
+            ))}
+            <option value={CUSTOM_MODEL_VALUE}>Other custom model</option>
+          </select>
+          {selectedModelValue(settings.provider_settings.provider, settings.provider_settings.model) === CUSTOM_MODEL_VALUE && (
+            <input value={settings.provider_settings.model} onChange={(event) => updateProvider("model", event.target.value)} placeholder="Enter model ID" />
+          )}
           {settings.provider_settings.provider === "ollama" ? (
             <input value={settings.provider_settings.ollama_url} onChange={(event) => updateProvider("ollama_url", event.target.value)} placeholder="Ollama URL" />
           ) : (
-            <input value={settings.provider_settings.api_key} onChange={(event) => updateProvider("api_key", event.target.value)} placeholder="API key" type="password" />
+            <>
+              <input value={settings.provider_settings.api_key} onChange={(event) => updateProvider("api_key", event.target.value)} placeholder="API key" type="password" />
+              {["openrouter", "openai"].includes(settings.provider_settings.provider) && (
+                <input value={settings.provider_settings.api_base} onChange={(event) => updateProvider("api_base", event.target.value)} placeholder="API base URL (optional)" />
+              )}
+            </>
           )}
         </section>
 
@@ -358,10 +455,15 @@ function App() {
         <div className="grid">
           <section className="panel main-card">
             <h2><FolderOpen size={19} /> Local path or folder</h2>
+            <p className="mode-note">
+              {desktopPickerAvailable
+                ? "VidMeta AI Desktop can pass real local paths to the service."
+                : "Web browsers cannot expose real local paths. Use the picker to upload, or paste a path when the API runs on this machine."}
+            </p>
             <div className="path-row">
               <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/Users/you/Videos/product-demo.mp4" />
-              <button className="icon-button" onClick={() => pickWithTauri("file")} title="Pick file in desktop app"><Video size={18} /></button>
-              <button className="icon-button" onClick={() => pickWithTauri("folder")} title="Pick folder in desktop app"><FolderOpen size={18} /></button>
+              <button className="icon-button" onClick={() => pickLocalSource("file")} title="Pick video file"><Video size={18} /></button>
+              <button className="icon-button" onClick={() => pickLocalSource("folder")} title="Pick video folder"><FolderOpen size={18} /></button>
             </div>
             <div className="form-grid">
               <input value={settings.brand_context.brand_name} onChange={(event) => updateBrand("brand_name", event.target.value)} placeholder="Brand" />
@@ -379,10 +481,28 @@ function App() {
 
           <section className="panel main-card">
             <h2><UploadCloud size={19} /> Resumable browser upload</h2>
-            <input className="file-input" type="file" accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
+            <input
+              ref={browserFilePickerRef}
+              className="file-input"
+              type="file"
+              accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
+              multiple
+              onChange={(event) => handleBrowserFiles(event.target.files)}
+            />
+            <input
+              ref={browserFolderPickerRef}
+              className="hidden-input"
+              type="file"
+              accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
+              multiple
+              onChange={(event) => handleBrowserFiles(event.target.files)}
+            />
+            {uploadFiles.length > 0 && (
+              <p className="selected-files">{uploadFiles.length} selected: {uploadFiles.slice(0, 2).map((file) => file.name).join(", ")}{uploadFiles.length > 2 ? "..." : ""}</p>
+            )}
             <p className="muted">Use this when the browser and backend are on different machines. For local desktop files, path mode is faster and avoids upload limits.</p>
             {uploadProgress > 0 && <div className="progress"><span style={{ width: `${uploadProgress}%` }} /></div>}
-            <button className="primary" onClick={uploadAndRun} disabled={busy || !uploadFile}><UploadCloud size={17} /> Upload and analyze</button>
+            <button className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length}><UploadCloud size={17} /> Upload and analyze</button>
           </section>
         </div>
 
@@ -433,8 +553,64 @@ function App() {
   function updateProvider<K extends keyof ProviderSettings>(key: K, value: ProviderSettings[K]) {
     setSettings((current) => ({ ...current, provider_settings: { ...current.provider_settings, [key]: value } }));
   }
+  function selectProvider(provider: string) {
+    setSettings((current) => ({
+      ...current,
+      provider_settings: {
+        ...current.provider_settings,
+        provider,
+        model: DEFAULT_MODEL_BY_PROVIDER[provider] ?? ""
+      }
+    }));
+  }
+  function selectModel(value: string) {
+    if (value === CUSTOM_MODEL_VALUE) {
+      updateProvider("model", "");
+      return;
+    }
+    updateProvider("model", value);
+  }
   function updateStorage<K extends keyof StorageSettings>(key: K, value: StorageSettings[K]) {
     setSettings((current) => ({ ...current, storage_settings: { ...current.storage_settings, [key]: value } }));
+  }
+  function handleBrowserFiles(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []).filter((file) => {
+      const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+      return file.type.startsWith("video/") || VIDEO_EXTENSIONS.has(extension);
+    });
+    setUploadFiles(files);
+    setUploadProgress(0);
+    setMessage(files.length ? `${files.length} video file${files.length === 1 ? "" : "s"} selected` : "No supported video files selected");
+  }
+}
+
+function normalizeSettings(settings: AppSettings): AppSettings {
+  const provider = settings.provider_settings.provider || "ollama";
+  const model =
+    provider === "ollama" && settings.provider_settings.model === "gemma4"
+      ? DEFAULT_MODEL_BY_PROVIDER.ollama
+      : settings.provider_settings.model || DEFAULT_MODEL_BY_PROVIDER[provider] || "";
+  return {
+    ...settings,
+    provider_settings: {
+      ...settings.provider_settings,
+      provider,
+      model
+    }
+  };
+}
+
+function selectedModelValue(provider: string, model: string) {
+  const presets = MODEL_PRESETS[provider] ?? [];
+  return presets.some((option) => option.value === model) ? model : CUSTOM_MODEL_VALUE;
+}
+
+async function canUseDesktopDialog() {
+  try {
+    const core = await import("@tauri-apps/api/core");
+    return core.isTauri();
+  } catch {
+    return false;
   }
 }
 

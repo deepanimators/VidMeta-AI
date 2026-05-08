@@ -8,7 +8,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ProviderConfig:
     provider: str = "ollama"
-    model: str = "gemma4"
+    model: str = "gemma3:4b"
     api_key: str = ""
     api_base: str = ""
     ollama_url: str = "http://localhost:11434"

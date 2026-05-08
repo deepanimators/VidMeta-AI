@@ -47,7 +47,7 @@ class VideoSettings(BaseModel):
 
 class ProviderSettings(BaseModel):
     provider: str = "ollama"
-    model: str = "gemma4"
+    model: str = "gemma3:4b"
     api_key: str = ""
     api_base: str = ""
     ollama_url: str = "http://localhost:11434"

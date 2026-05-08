@@ -4,9 +4,9 @@
   "version": "2.0.0",
   "identifier": "ai.vidmeta.desktop",
   "build": {
-    "beforeDevCommand": "cd ../../web && npm run dev",
+    "beforeDevCommand": "cd ../web && npm run dev -- --host 127.0.0.1 --port 5173 --strictPort",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd ../../web && npm run build",
+    "beforeBuildCommand": "cd ../web && npm run build",
     "frontendDist": "../../web/dist"
   },
   "app": {
@@ -25,7 +25,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app"],
     "icon": []
   }
 }

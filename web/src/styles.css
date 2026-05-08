@@ -168,6 +168,14 @@ textarea {
   line-height: 1.45;
 }
 
+.mode-note,
+.selected-files {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .path-row {
   display: grid;
   grid-template-columns: 1fr 44px 44px;
@@ -266,6 +274,10 @@ button:disabled {
   display: flex;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.hidden-input {
+  display: none;
 }
 
 .progress {
