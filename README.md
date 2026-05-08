@@ -1,153 +1,172 @@
-# 🎬 VidMeta AI Hub
+# VidMeta AI
 
-Analyze local videos with AI → Generate upload-ready metadata for **YouTube, Instagram, Facebook, TikTok, LinkedIn** — all in one shot.
+Analyze local videos with AI and generate upload-ready metadata for YouTube, Instagram, Facebook, TikTok, and LinkedIn.
 
----
+VidMeta AI is a Python Streamlit local app. It is not a React/Vite frontend or Node/Express backend. Users run it on their own machine, choose a local video or folder, and generate titles, descriptions, hashtags, keywords, CTAs, and posting tips.
 
-## ✅ Prerequisites
+## Features
 
-| Tool | Required | Install |
-|------|----------|---------|
-| Python 3.10+ | Yes | [python.org](https://python.org) |
-| ffmpeg | Yes (for audio) | See below |
-| Ollama | Only for local LLM | [ollama.com](https://ollama.com) |
+- Single video analysis by upload or local file path.
+- Batch processing for a local folder of videos.
+- Frame extraction with OpenCV.
+- Optional audio transcription with `ffmpeg` and Whisper.
+- LLM providers: Ollama, OpenRouter, OpenAI, Anthropic, and Google Gemini.
+- Exports: JSON, CSV, TXT.
+- Large browser upload limit configured to 2048 MB by default.
+- Local file path mode for videos larger than the browser upload path should handle.
 
-### Install ffmpeg
+## Prerequisites
 
-**Mac:**
+| Tool | Required | Notes |
+| --- | --- | --- |
+| Python 3.10+ | Yes | Python 3.11 recommended |
+| ffmpeg | Yes for audio | Frame-only analysis works without transcription |
+| Ollama | Optional | For local/private LLM inference |
+
+Install ffmpeg:
+
 ```bash
+# macOS
 brew install ffmpeg
-```
 
-**Ubuntu/Debian:**
-```bash
+# Ubuntu/Debian
 sudo apt install ffmpeg
 ```
 
-**Windows:**
-Download from [ffmpeg.org](https://ffmpeg.org/download.html), add to PATH.
-
----
-
-## 🚀 Setup
+## Setup
 
 ```bash
-# 1. Clone / download this folder
+git clone <your-repo-url>
 cd VidMeta-AI
 
-# 2. Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate        # Mac/Linux
-# venv\Scripts\activate         # Windows
+python -m venv .venv
+source .venv/bin/activate
 
-# 3. Install dependencies
 pip install -r requirements.txt
+pip install .
 
-# If still failing, try running Python directly
-python -m vidmeta.cli run app.py
-
-# 4. Run the app
-vidmeta run app.py
-
-# Check if the entry point was installed:
-pip show -f vidmeta
+vidmeta run
 ```
 
-The app opens at **http://localhost:8501**
+Open `http://localhost:8501`.
 
----
+## Large Video Uploads
 
-## 🤖 LLM Provider Setup
+Streamlit limits browser uploads to 200 MB by default. This repo fixes that in two places:
 
-### Option A — Ollama (100% Free, Local, Private)
+- `.streamlit/config.toml` sets `maxUploadSize = 2048` and `maxMessageSize = 2048`.
+- `vidmeta run` passes the same values as Streamlit CLI flags.
+
+To change the limit:
+
 ```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull a vision model
-ollama pull gemma4              # 4GB — recommended
-ollama pull moondream          # 1.7GB — lightweight
-ollama pull gemma4-llama3       # 8GB — best quality
+VIDMETA_MAX_UPLOAD_MB=4096 VIDMETA_MAX_MESSAGE_MB=4096 vidmeta run
 ```
-In the app sidebar: select **Ollama — Local/Free**, enter `http://localhost:11434`, model name `gemma4`.
 
-### Option B — OpenRouter (Free tier available)
-1. Sign up at [openrouter.ai](https://openrouter.ai/)
-2. Get API key (free tier available)
-3. Best free vision model: `meta-llama/llama-3.2-11b-vision-instruct:free`
+For very large videos, use `Local file path` or `Batch - Folder`. That keeps processing local and avoids pushing the entire video through the browser upload channel.
 
-### Option C — OpenAI
-Use an OpenAI API Key from [platform.openai.com](https://platform.openai.com/api-keys). OpenAI accounts used here must have API billing enabled. Use `gpt-4o` for best results.
+## LLM Provider Setup
 
-### Option D — Anthropic Claude
-API key from [console.anthropic.com](https://console.anthropic.com/). Use `claude-opus-4-6` for best results.
+### Ollama - local/private
 
-### Option E — Google Gemini
-API key from [aistudio.google.com](https://aistudio.google.com/apikey). Free tier available.
+```bash
+ollama pull moondream
+ollama pull gemma4
+```
 
----
+In the sidebar, choose `Ollama - Local / Free`, set the URL to `http://localhost:11434`, and enter the model name.
 
-## 🎬 How to Use
+### Hosted providers
 
-1. **Set up LLM** in the sidebar (pick provider, enter key, select model)
-2. **Upload video** or paste local file path
-3. Hit **Analyze & Generate**
-4. Wait ~30-90 seconds (depends on video length + LLM speed)
-5. Get metadata for all 5 platforms — title, description, hashtags, keywords, CTA, posting tips
-6. **Export** as JSON / CSV / TXT
+The sidebar supports OpenRouter, OpenAI, Anthropic, and Gemini keys. For local use, entering keys in the sidebar is convenient. For hosted deployments, use server-side environment variables and do not persist provider keys in browser cookies.
 
----
+## Docker
 
-## 📁 Output Fields per Platform
+```bash
+docker compose up --build
+```
 
-| Field | YouTube | Instagram | Facebook | TikTok | LinkedIn |
-|-------|---------|-----------|----------|--------|----------|
-| Title | ✅ (60 chars) | ✅ hook | ✅ | ✅ (100 chars) | ✅ |
-| Description | ✅ 300-400 words | ✅ 200 words | ✅ 150 words | ✅ 150 words | ✅ 250 words |
-| Hashtags | ✅ 10 | ✅ 30 | ✅ 5 | ✅ 15 | ✅ 7 |
-| SEO Keywords | ✅ 15 | ✅ 10 | ✅ 8 | ✅ 8 | ✅ 8 |
-| CTA | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Posting tip | ✅ | ✅ | ✅ | ✅ | ✅ |
+Open `http://localhost:8501`.
 
----
+Put videos in `./videos` and use paths like `/videos/example.mp4` inside the app.
 
-## ⚙️ Settings Reference
+If Ollama runs on your host machine, use `http://host.docker.internal:11434` from inside Docker.
 
-| Setting | Description |
-|---------|-------------|
-| Whisper model | `tiny` = fast, `base` = balanced, `small/medium` = accurate |
-| Frame interval | Extract 1 frame every N seconds |
-| Max frames | How many frames sent to LLM (more = better analysis, slower) |
-| Brand context | Used to tailor all metadata to your brand |
+## Documentation
 
-Sidebar selections, including the active LLM provider, are stored in browser cookies and will reappear on future visits from the same browser on the same host/port.
+- [Deep folder audit](docs/FOLDER_AUDIT.md)
+- [API and CLI contract](docs/API_CONTRACT.md)
+- [Environment variables](docs/ENVIRONMENT.md)
+- [Dependency/security audit](docs/DEPENDENCY_SECURITY_AUDIT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Database schema](docs/DATABASE_SCHEMA.md)
+- [SQLite schema SQL](docs/schema.sql)
+- [Deployment guide](docs/DEPLOYMENT.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Issue backlog](docs/ISSUE_BACKLOG.md)
+- [Production checklist](docs/PRODUCTION_CHECKLIST.md)
+- [SEO optimization audit](docs/SEO_OPTIMIZATION_AUDIT.md)
+- [AI prompt optimization](docs/AI_PROMPT_OPTIMIZATION.md)
+- [Refactor plan](docs/REFACTOR_PLAN.md)
+- [SaaS blueprint](docs/SAAS_BLUEPRINT.md)
 
-### Large uploads
+## Correct Architecture Summary
 
-Streamlit limits browser uploads to 200 MB by default. To allow 1 GB uploads, keep these settings in `config.toml`:
+```mermaid
+flowchart LR
+    U["Local user"] --> UI["Streamlit app"]
+    UI --> V["Video processing"]
+    V --> F["Frame extraction"]
+    V --> T["Audio transcription"]
+    UI --> L["LLM provider"]
+    L --> M["Metadata JSON"]
+    M --> E["JSON / CSV / TXT export"]
+```
 
-- `server.maxUploadSize = 1024`
-- `server.maxMessageSize = 1024`
+## Troubleshooting
 
-Restart the app after changing them. For very large files, local file path upload is still the most reliable option.
+### Upload still says 200 MB
 
----
+Run the app with:
 
-## 🔧 Troubleshooting
+```bash
+vidmeta run
+```
 
-**`cv2` import error:**
+or from the repository root:
+
+```bash
+streamlit run app.py --server.maxUploadSize 2048 --server.maxMessageSize 2048
+```
+
+Restart Streamlit after changing upload limits.
+
+### `cv2` import error
+
 ```bash
 pip install opencv-python-headless
 ```
 
-**ffmpeg not found:**
-Make sure ffmpeg is installed and in your PATH. Test: `ffmpeg -version`
+### `ffmpeg` not found
 
-**Ollama connection refused:**
-Make sure Ollama is running: `ollama serve`
+Install ffmpeg and confirm:
 
-**LLM returns non-JSON:**
-Try a more capable model. `gpt-4o`, `claude-opus-4-6`, or `gemma4-llama3` are most reliable.
+```bash
+ffmpeg -version
+```
 
-**Out of memory with large videos:**
-Reduce `Max frames` to 3-4, increase `Frame interval` to 10-15 seconds.
+### Ollama connection refused
+
+Start Ollama:
+
+```bash
+ollama serve
+```
+
+### LLM returns invalid JSON
+
+Try a stronger model or reduce transcript/frame volume. JSON validation and repair are listed in the refactor plan.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

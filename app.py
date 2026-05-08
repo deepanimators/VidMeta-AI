@@ -65,6 +65,19 @@ def _cookie_choice(name, options, default):
     value = _cookie_text(name, default)
     return value if value in options else default
 
+
+def _env_int(name, default):
+    raw = os.environ.get(name)
+    if raw in (None, ""):
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+MAX_UPLOAD_MB = _env_int("VIDMETA_MAX_UPLOAD_MB", 2048)
+
 st.markdown("""
 <style>
 div[data-testid="stTextArea"] textarea { font-size: 0.88rem; }
@@ -471,6 +484,7 @@ with mode_single:
         uploaded_file = st.file_uploader(
             "Drag & drop your video here",
             type=["mp4", "mov", "avi", "mkv", "webm", "m4v"],
+            help=f"Browser uploads are configured for up to {MAX_UPLOAD_MB} MB. Use Local file path for larger videos.",
         )
         if uploaded_file:
             uploaded_size_mb = getattr(uploaded_file, "size", 0) / 1e6

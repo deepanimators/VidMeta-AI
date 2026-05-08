@@ -1,0 +1,13 @@
+services:
+  vidmeta:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      VIDMETA_COOKIE_PASSWORD: "${VIDMETA_COOKIE_PASSWORD:-change-this-local-cookie-password}"
+      VIDMETA_MAX_UPLOAD_MB: "${VIDMETA_MAX_UPLOAD_MB:-2048}"
+      VIDMETA_MAX_MESSAGE_MB: "${VIDMETA_MAX_MESSAGE_MB:-2048}"
+    volumes:
+      - ./videos:/videos:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
