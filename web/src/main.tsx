@@ -286,6 +286,7 @@ function App() {
     }
     return selectedJob;
   }, [result, selectedJob]);
+  const selectedResult = result?.id === selectedJob?.id ? result : null;
 
   React.useEffect(() => {
     void refresh();
@@ -322,9 +323,12 @@ function App() {
     try {
       const nextJobs = await api<Job[]>("/api/jobs");
       setJobs(nextJobs);
-      if (!selectedJobId && nextJobs.length) {
-        setSelectedJobId(nextJobs[0].id);
-      }
+      setSelectedJobId((current) => {
+        if (current && nextJobs.some((job) => job.id === current)) {
+          return current;
+        }
+        return nextJobs[0]?.id ?? "";
+      });
     } catch {
       // Backend may still be starting.
     }
@@ -660,7 +664,7 @@ function App() {
               </div>
             </div>
             {selectedJob.status === "failed" && <p className="warning">{selectedJob.error_message}</p>}
-            {result?.metadata ? <MetadataView metadata={result.metadata} analysis={result.analysis} transcript={result.transcript} /> : <p className="muted">Result appears here after the job completes.</p>}
+            {selectedResult?.metadata ? <MetadataView metadata={selectedResult.metadata} analysis={selectedResult.analysis} transcript={selectedResult.transcript} /> : <p className="muted">Result appears here after the job completes.</p>}
           </section>
         )}
       </section>
