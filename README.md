@@ -11,6 +11,10 @@ The supported runtime is now:
 
 The old Streamlit app is retained only as a migration reference under `legacy/`.
 
+## Screenshot
+<img width="2442" height="10234" alt="image" src="https://github.com/user-attachments/assets/4a88bafc-d607-48ae-b0c1-1c0b8493c1e1" />
+
+
 ## Why This Replaces Streamlit
 
 Browser upload widgets always have practical limits. The best large-video flow is to avoid uploading local files at all:
