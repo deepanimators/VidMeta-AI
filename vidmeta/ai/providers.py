@@ -35,12 +35,27 @@ def call_llm(frames: list[str], prompt: str, config: ProviderConfig, max_tokens:
 def _call_ollama(frames: list[str], prompt: str, url: str, model: str, max_tokens: int) -> str:
     import requests
 
+    base_url = url.rstrip("/")
     messages = [{"role": "user", "content": prompt, "images": frames}]
     response = requests.post(
-        f"{url.rstrip('/')}/api/chat",
+        f"{base_url}/api/chat",
         json={"model": model, "messages": messages, "stream": False, "options": {"num_predict": max_tokens}},
         timeout=180,
     )
+    if response.status_code == 404:
+        response = requests.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "images": frames,
+                "stream": False,
+                "options": {"num_predict": max_tokens},
+            },
+            timeout=180,
+        )
+        response.raise_for_status()
+        return response.json().get("response", "")
     response.raise_for_status()
     return response.json().get("message", {}).get("content", "")
 
@@ -61,12 +76,21 @@ def _call_openai_compat(
         for frame in frames[:6]
     ]
     content.append({"type": "text", "text": prompt})
+    token_limit_param = (
+        {"max_completion_tokens": max_tokens}
+        if _is_openai_base_url(base_url)
+        else {"max_tokens": max_tokens}
+    )
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": content}],
-        max_tokens=max_tokens,
+        **token_limit_param,
     )
     return response.choices[0].message.content or ""
+
+
+def _is_openai_base_url(base_url: str) -> bool:
+    return base_url.rstrip("/").lower() == "https://api.openai.com/v1"
 
 
 def _call_anthropic(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
