@@ -33,9 +33,9 @@ def processing_dir() -> Path:
 
 class BrandContext(BaseModel):
     brand_name: str = "Condenast"
-    brand_niche: str = "Kids fashion & clothing, India"
-    target_audience: str = "Mothers, parents, India"
-    tone: str = "Fun & playful"
+    brand_niche: str = ""
+    target_audience: str = ""
+    tone: str = ""
 
 
 class VideoSettings(BaseModel):
