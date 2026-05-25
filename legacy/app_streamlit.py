@@ -200,13 +200,13 @@ with st.sidebar:
     st.divider()
 
     st.markdown("#### Brand Context")
-    brand_name      = st.text_input("Brand name",       value=_cookie_text("brand_name", "Condenast"))
-    brand_niche     = st.text_input("Niche",            value=_cookie_text("brand_niche", "Kids fashion & clothing, India"))
-    target_audience = st.text_input("Target audience",  value=_cookie_text("target_audience", "Mothers, parents, India"))
+    brand_name      = st.text_input("Brand name",       value=_cookie_text("brand_name", ""))
+    brand_niche     = st.text_input("Niche",            value=_cookie_text("brand_niche", ""))
+    target_audience = st.text_input("Target audience",  value=_cookie_text("target_audience", ""))
     brand_tone      = st.select_slider(
         "Tone",
-        options=["Fun & playful", "Warm & friendly", "Professional", "Exciting"],
-        value=_cookie_choice("brand_tone", ["Fun & playful", "Warm & friendly", "Professional", "Exciting"], "Fun & playful"),
+        options=[""],
+        value=_cookie_choice("brand_tone", [""], ""),
     )
 
     cookies["provider"] = provider

@@ -14,10 +14,10 @@ from vidmeta.ai.prompts import (
     platform_json_template,
     platform_requirements,
 )
-from vidmeta.ai.providers import ProviderConfig, call_llm
+from vidmeta.ai.providers import ProviderConfig, call_llm, ollama_likely_text_only
 from vidmeta.ai.schemas import MetadataResult
 from vidmeta.settings import BrandContext, ProviderSettings, VideoSettings
-from vidmeta.video.frames import extract_frames
+from vidmeta.video.frames import extract_frames, extract_thumbnails, get_video_metadata
 from vidmeta.video.transcription import transcribe_audio
 
 
@@ -35,16 +35,54 @@ def analyze_video(
 
     selected_platforms = normalize_platforms(target_platforms)
 
+    # --- Video metadata (fast, no ML) ---
+    _progress(progress, "frames", 5, "Reading video properties")
+    video_meta_str = "Video metadata unavailable"
+    video_meta_dict: dict[str, Any] = {}
+    orientation_hint = "unknown orientation"
+    try:
+        vm = get_video_metadata(file_path)
+        mins, secs = divmod(int(vm.duration_seconds), 60)
+        dur_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+        video_meta_str = (
+            f"Duration: {dur_str} | "
+            f"Resolution: {vm.width}×{vm.height} | "
+            f"Aspect ratio: {vm.aspect_ratio} ({vm.orientation}) | "
+            f"FPS: {vm.fps} | "
+            f"Total frames: {vm.frame_count}"
+        )
+        orientation_hint = f"{vm.aspect_ratio} {vm.orientation}"
+        video_meta_dict = {
+            "duration_seconds": vm.duration_seconds,
+            "width": vm.width,
+            "height": vm.height,
+            "fps": vm.fps,
+            "aspect_ratio": vm.aspect_ratio,
+            "orientation": vm.orientation,
+        }
+    except Exception:
+        pass
+
+    # --- Frame extraction ---
     _progress(progress, "frames", 10, "Extracting representative video frames")
     frames = extract_frames(file_path, video.frame_interval, video.max_frames)
+    thumbnails = extract_thumbnails(file_path, video.frame_interval, video.max_frames)
     _progress(
         progress,
         "frames",
         30,
-        f"Extracted {len(frames)} frame{'s' if len(frames) != 1 else ''}",
-        {"frame_count": len(frames), "frame_interval": video.frame_interval, "max_frames": video.max_frames},
+        f"Extracted {len(frames)} frame{'s' if len(frames) != 1 else ''} "
+        f"({len(thumbnails)} thumbnail{'s' if len(thumbnails) != 1 else ''})",
+        {
+            "frame_count": len(frames),
+            "frame_interval": video.frame_interval,
+            "max_frames": video.max_frames,
+            "thumbnails": thumbnails,
+            "video_metadata": video_meta_dict,
+        },
     )
 
+    # --- Audio transcription ---
     transcript = ""
     if video.use_whisper:
         _progress(
@@ -60,7 +98,11 @@ def analyze_video(
             "audio",
             50,
             "Audio transcription completed",
-            {"transcript_characters": len(transcript)},
+            {
+                "transcript_preview": transcript[:1000],
+                "transcript_characters": len(transcript),
+                "whisper_model_size": video.whisper_model_size,
+            },
         )
     else:
         _progress(progress, "audio", 50, "Audio transcription skipped", {"use_whisper": False})
@@ -73,27 +115,50 @@ def analyze_video(
         ollama_url=provider.ollama_url,
     )
 
+    # Detect Ollama text-only model before sending frames
+    vision_warning = ""
+    if provider.provider.lower() == "ollama" and frames and ollama_likely_text_only(provider.model):
+        vision_warning = (
+            f"Model '{provider.model}' may not support image inputs. "
+            "Analysis will be based on transcript only. "
+            "Switch to a vision-capable Ollama model (llava, llama3.2-vision, moondream, "
+            "minicpm-v, or gemma3) for true visual analysis."
+        )
+
     _progress(
         progress,
         "analysis",
         60,
         "Running visual and transcript analysis",
-        {"provider": provider.provider, "model": provider.model},
+        {
+            "provider": provider.provider,
+            "model": provider.model,
+            **({"vision_warning": vision_warning} if vision_warning else {}),
+        },
     )
     analysis_prompt = ANALYSIS_PROMPT.format(
         brand_name=brand.brand_name,
         brand_niche=brand.brand_niche,
         target_audience=brand.target_audience,
         tone=brand.tone,
+        video_metadata=video_meta_str,
+        orientation_hint=orientation_hint,
         transcript=transcript or "No transcript available",
     )
-    analysis = call_llm(frames, analysis_prompt, provider_config)
+    # Pass video_path so Gemini can use native video API instead of JPEG frames.
+    analysis = call_llm(frames, analysis_prompt, provider_config, video_path=file_path)
     _progress(
         progress,
         "analysis",
         75,
         "Video analysis completed",
-        {"analysis_characters": len(analysis)},
+        {
+            "analysis_preview": analysis[:1000],
+            "analysis_characters": len(analysis),
+            "provider": provider.provider,
+            "model": provider.model,
+            **({"vision_warning": vision_warning} if vision_warning else {}),
+        },
     )
 
     _progress(

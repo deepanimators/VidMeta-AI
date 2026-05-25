@@ -60,13 +60,42 @@ type AppSettings = {
   storage_settings: StorageSettings;
 };
 
+type VideoMetaDetails = {
+  duration_seconds?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  aspect_ratio?: string;
+  orientation?: string;
+};
+
+type JobEventDetails = {
+  thumbnails?: string[];
+  video_metadata?: VideoMetaDetails;
+  transcript_preview?: string;
+  transcript_characters?: number;
+  analysis_preview?: string;
+  analysis_characters?: number;
+  vision_warning?: string;
+  frame_count?: number;
+  [key: string]: unknown;
+};
+
 type JobEvent = {
   id: number;
   stage: string;
   progress: number;
   message: string;
-  details?: Record<string, unknown>;
+  details?: JobEventDetails;
   created_at?: string;
+};
+
+type LiveExtractionData = {
+  thumbnails: string[];
+  videoMetadata: VideoMetaDetails;
+  transcriptPreview: string;
+  analysisPreview: string;
+  visionWarning: string;
 };
 
 type Job = {
@@ -253,7 +282,7 @@ const defaultSettings: AppSettings = {
     use_whisper: true,
     whisper_model_size: "base",
     frame_interval: 5,
-    max_frames: 6
+    max_frames: 20
   },
   provider_settings: {
     provider: "ollama",
@@ -286,6 +315,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [uploadProgress, setUploadProgress] = React.useState(0);
+  const [liveData, setLiveData] = React.useState<Partial<LiveExtractionData> | null>(null);
   const browserFilePickerRef = React.useRef<HTMLInputElement>(null);
   const browserFolderPickerRef = React.useRef<HTMLInputElement>(null);
 
@@ -327,6 +357,69 @@ function App() {
       void loadResult(selectedJob.id);
     }
   }, [selectedJob?.id, selectedJob?.status]);
+
+  // Clear live data when a different job is selected.
+  React.useEffect(() => {
+    setLiveData(null);
+  }, [selectedJobId]);
+
+  // For completed/failed jobs: fetch full event details (including thumbnails) once.
+  React.useEffect(() => {
+    if (!selectedJob || (selectedJob.status !== "completed" && selectedJob.status !== "failed")) return;
+    api<{ events?: JobEvent[] }>(`/api/jobs/${selectedJob.id}`).then((full) => {
+      const frames = full.events?.find((e) => e.stage === "frames");
+      const audio = full.events?.find((e) => e.stage === "audio");
+      const analysis = full.events?.find((e) => e.stage === "analysis" && e.details?.analysis_preview);
+      setLiveData({
+        thumbnails: frames?.details?.thumbnails ?? [],
+        videoMetadata: frames?.details?.video_metadata ?? {},
+        transcriptPreview: audio?.details?.transcript_preview ?? "",
+        analysisPreview: analysis?.details?.analysis_preview ?? "",
+        visionWarning: analysis?.details?.vision_warning ?? frames?.details?.vision_warning ?? "",
+      });
+    }).catch(() => {});
+  }, [selectedJob?.id, selectedJob?.status]);
+
+  // SSE stream for running/queued jobs — pushes live extraction data to UI.
+  React.useEffect(() => {
+    const status = selectedJob?.status;
+    if (!selectedJobId || status === "completed" || status === "failed" || !status) return;
+    const es = new EventSource(`${API_BASE}/api/jobs/${selectedJobId}/stream`);
+    es.onmessage = (e: MessageEvent<string>) => {
+      try {
+        const data = JSON.parse(e.data) as { type: string; stage?: string; details?: JobEventDetails };
+        if (data.type !== "event" || !data.details) return;
+        const { stage, details } = data;
+        if (stage === "frames") {
+          setLiveData((prev) => ({
+            ...prev,
+            thumbnails: details.thumbnails ?? prev?.thumbnails ?? [],
+            videoMetadata: details.video_metadata ?? prev?.videoMetadata ?? {},
+          }));
+        } else if (stage === "audio" && details.transcript_preview) {
+          setLiveData((prev) => ({
+            ...prev,
+            transcriptPreview: details.transcript_preview ?? "",
+          }));
+        } else if (stage === "analysis") {
+          setLiveData((prev) => ({
+            ...prev,
+            analysisPreview: details.analysis_preview ?? prev?.analysisPreview ?? "",
+            visionWarning: details.vision_warning ?? prev?.visionWarning ?? "",
+          }));
+        }
+      } catch {
+        // Ignore parse errors from malformed SSE frames.
+      }
+    };
+    es.addEventListener("done", () => {
+      es.close();
+      void refresh();
+    });
+    es.onerror = () => es.close();
+    return () => es.close();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJobId, selectedJob?.status]);
 
   async function loadSettings() {
     try {
@@ -714,6 +807,8 @@ function App() {
           {selectedJobDetails && <JobProgressDetails job={selectedJobDetails} />}
         </section>
 
+        {liveData && <section className="panel"><LiveExtractionPanel data={liveData} /></section>}
+
         {selectedJob && (
           <section className="panel result-panel">
             <div className="result-header">
@@ -985,6 +1080,75 @@ function JobProgressDetails({ job }: { job: Job }) {
         ))}
         {!events.length && <p className="muted">Detailed progress will appear after the job starts.</p>}
       </div>
+    </div>
+  );
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
+  const { thumbnails = [], videoMetadata = {}, transcriptPreview = "", analysisPreview = "", visionWarning = "" } = data;
+  const hasContent = thumbnails.length > 0 || transcriptPreview || analysisPreview || Object.keys(videoMetadata).length > 0;
+  if (!hasContent) return null;
+  return (
+    <div className="live-extraction">
+      {Object.keys(videoMetadata).length > 0 && (
+        <div className="live-meta-badges">
+          {videoMetadata.duration_seconds != null && <span className="live-badge">{formatDuration(videoMetadata.duration_seconds)}</span>}
+          {videoMetadata.width != null && <span className="live-badge">{videoMetadata.width}×{videoMetadata.height}</span>}
+          {videoMetadata.aspect_ratio && <span className="live-badge">{videoMetadata.aspect_ratio}</span>}
+          {videoMetadata.orientation && <span className="live-badge">{videoMetadata.orientation}</span>}
+          {videoMetadata.fps != null && <span className="live-badge">{Math.round(videoMetadata.fps)} fps</span>}
+        </div>
+      )}
+      {visionWarning && (
+        <div className="live-warning">
+          <AlertTriangle size={14} />
+          <span>{visionWarning}</span>
+        </div>
+      )}
+      {thumbnails.length > 0 && (
+        <div className="live-section">
+          <div className="live-section-head">
+            <Video size={13} />
+            <strong>Extracted Frames</strong>
+            <em>{thumbnails.length} frames</em>
+          </div>
+          <div className="live-frames">
+            {thumbnails.map((thumb, i) => (
+              <img
+                key={i}
+                src={`data:image/jpeg;base64,${thumb}`}
+                alt={`Frame ${i + 1}`}
+                className="live-frame-thumb"
+                title={`Frame ${i + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {transcriptPreview && (
+        <div className="live-section">
+          <div className="live-section-head">
+            <History size={13} />
+            <strong>Transcript</strong>
+          </div>
+          <div className="live-text">{transcriptPreview}</div>
+        </div>
+      )}
+      {analysisPreview && (
+        <div className="live-section">
+          <div className="live-section-head">
+            <CheckCircle2 size={13} />
+            <strong>Visual Analysis</strong>
+          </div>
+          <div className="live-text">{analysisPreview}</div>
+        </div>
+      )}
     </div>
   );
 }

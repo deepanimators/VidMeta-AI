@@ -43,19 +43,23 @@ Niche: {brand_niche}
 Target Audience: {target_audience}
 Tone: {tone}
 
+Video Technical Details:
+{video_metadata}
+
 Audio Transcript:
 {transcript}
 
 Analyze the video frames and describe:
 1. Main subject and core message
-2. Visual elements: products, colors, setting, people, style
-3. Audio/speech summary
-4. Content category
-5. Unique selling points visible
-6. Emotional appeal and audience fit
-7. Suggested social media angles
+2. Visual elements: products, colors, setting, people, style, text overlays, branding, logos
+3. Audio and speech summary — tone, pacing, key spoken claims
+4. Content category and format (tutorial, review, vlog, short-form, long-form, ad, etc.)
+5. Unique selling points and differentiators visible in the footage
+6. Emotional appeal and target audience fit
+7. Platform recommendations informed by orientation ({orientation_hint}) and duration
+8. Best thumbnail moment — describe the most visually compelling frame
 
-Be specific. This drives all metadata generation."""
+Be specific and evidence-based. Every observation drives metadata generation."""
 
 
 METADATA_PROMPT = """Generate optimized social media metadata from this video analysis.

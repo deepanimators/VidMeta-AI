@@ -366,7 +366,8 @@ class Database:
 
         events_by_job: dict[str, list[dict[str, Any]]] = {row["id"]: [] for row in rows}
         for event in _decode_events(event_rows):
-            events_by_job.setdefault(event["job_id"], []).append(event)
+            # Strip large thumbnail arrays from list queries to keep payload small.
+            events_by_job.setdefault(event["job_id"], []).append(_strip_large_details(event))
 
         result: list[dict[str, Any]] = []
         for row in rows:
@@ -433,6 +434,15 @@ class Database:
         data = dict(row)
         data["request"] = json.loads(data.pop("request_json") or "{}")
         return data
+
+
+def _strip_large_details(event: dict[str, Any]) -> dict[str, Any]:
+    """Remove large thumbnail arrays from event details for list queries."""
+    details = event.get("details")
+    if not details or "thumbnails" not in details:
+        return event
+    stripped = {k: v for k, v in details.items() if k != "thumbnails"}
+    return {**event, "details": stripped}
 
 
 def _decode_events(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:

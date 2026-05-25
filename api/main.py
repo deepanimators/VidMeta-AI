@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -98,6 +101,50 @@ async def get_job_events(job_id: str) -> list[dict]:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job.get("events", [])
+
+
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_job_events(job_id: str, request: Request, since: int = 0):
+    """Server-Sent Events stream for real-time job progress.
+
+    Sends full event details (including frame thumbnails) as the job runs.
+    Connect with ``EventSource('/api/jobs/{id}/stream')``.
+    Emits ``data:`` messages (type=event|status) and a final ``event:done`` when the job ends.
+    """
+    async def generate():
+        last_id = since
+        last_status_key = ""
+        while True:
+            if await request.is_disconnected():
+                break
+            job = db.get_job(job_id)
+            if not job:
+                yield f"event: error\ndata: {json.dumps({'detail': 'Job not found'})}\n\n"
+                break
+            for ev in job.get("events", []):
+                ev_id = ev.get("id", 0)
+                if ev_id > last_id:
+                    last_id = ev_id
+                    payload = {k: v for k, v in ev.items() if k != "job_id"}
+                    yield f"data: {json.dumps({'type': 'event', **payload})}\n\n"
+            status_key = f"{job.get('status')}:{job.get('stage')}:{job.get('progress')}"
+            if status_key != last_status_key:
+                last_status_key = status_key
+                yield f"data: {json.dumps({'type': 'status', 'status': job.get('status'), 'stage': job.get('stage'), 'progress': job.get('progress')})}\n\n"
+            if job.get("status") in {"completed", "failed"}:
+                yield f"event: done\ndata: {json.dumps({'status': job['status']})}\n\n"
+                break
+            await asyncio.sleep(0.8)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/jobs/{job_id}/result")
