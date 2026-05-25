@@ -4,6 +4,8 @@ import base64
 import io
 from dataclasses import dataclass
 
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
 
 @dataclass(frozen=True)
 class ProviderConfig:
@@ -14,6 +16,30 @@ class ProviderConfig:
     ollama_url: str = "http://localhost:11434"
 
 
+def _is_retryable(exc: BaseException) -> bool:
+    """True for transient network/rate-limit errors; False for auth/config errors."""
+    import requests
+
+    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+        return True
+    # Provider SDK exception names that indicate transient failures
+    retryable = {
+        "APIConnectionError",
+        "APITimeoutError",
+        "InternalServerError",
+        "ServiceUnavailableError",
+        "RateLimitError",
+        "OverloadedError",
+    }
+    return type(exc).__name__ in retryable
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=retry_if_exception(_is_retryable),
+    reraise=True,
+)
 def call_llm(frames: list[str], prompt: str, config: ProviderConfig, max_tokens: int = 2200) -> str:
     provider = config.provider.lower()
     if provider == "ollama":

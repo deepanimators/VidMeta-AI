@@ -31,6 +31,21 @@ def processing_dir() -> Path:
     return path
 
 
+def cors_origins() -> list[str]:
+    raw = os.environ.get("VIDMETA_CORS_ORIGINS", "")
+    if not raw:
+        return ["*"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+def allowed_paths() -> list[Path] | None:
+    """Returns None when unrestricted (local mode), or a list of allowed base dirs."""
+    raw = os.environ.get("VIDMETA_ALLOWED_PATHS", "")
+    if not raw:
+        return None
+    return [Path(p.strip()).expanduser().resolve() for p in raw.split(":") if p.strip()]
+
+
 class BrandContext(BaseModel):
     brand_name: str = "Condenast"
     brand_niche: str = ""
@@ -67,6 +82,7 @@ class StorageSettings(BaseModel):
 class AppSettings(BaseModel):
     app_mode: str = "local"
     max_upload_mb: int = int(os.environ.get("VIDMETA_MAX_UPLOAD_MB", "2048"))
+    upload_retention_days: int = int(os.environ.get("VIDMETA_UPLOAD_RETENTION_DAYS", "0"))
     brand_context: BrandContext = Field(default_factory=BrandContext)
     video_settings: VideoSettings = Field(default_factory=VideoSettings)
     provider_settings: ProviderSettings = Field(default_factory=ProviderSettings)

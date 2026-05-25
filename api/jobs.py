@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -10,8 +11,22 @@ from typing import Any, Callable
 from vidmeta.ai.prompts import normalize_platforms
 from vidmeta.service.database import Database
 from vidmeta.service.pipeline import analyze_video
-from vidmeta.settings import VIDEO_EXTENSIONS, AppSettings, BrandContext, ProviderSettings, VideoSettings
+from vidmeta.settings import VIDEO_EXTENSIONS, AppSettings, BrandContext, ProviderSettings, VideoSettings, allowed_paths
 from vidmeta.storage.backends import import_local_file_if_needed, materialize_for_processing
+
+
+def _validate_path(path: Path) -> None:
+    """Enforce path allowlist when VIDMETA_ALLOWED_PATHS is set (hosted mode).
+    In local mode (unset), no path restriction is applied — the user running
+    the service already has full filesystem access.
+    """
+    allowed = allowed_paths()
+    if allowed is None:
+        return  # Local mode: unrestricted
+    resolved = path.resolve()
+    if not any(resolved.is_relative_to(a) for a in allowed):
+        allowed_str = ", ".join(str(a) for a in allowed)
+        raise ValueError(f"Path '{path}' is not within allowed directories: {allowed_str}")
 
 
 class JobRunner:
@@ -23,6 +38,7 @@ class JobRunner:
 
     def create_from_path(self, payload: dict) -> dict:
         source_path = Path(payload["path"]).expanduser()
+        _validate_path(source_path)
         if not source_path.exists():
             raise FileNotFoundError(f"Path does not exist: {source_path}")
         if source_path.is_file() and source_path.suffix.lower() not in VIDEO_EXTENSIONS:
@@ -184,14 +200,23 @@ class JobRunner:
             f"Starting batch analysis for {total} video file{'s' if total != 1 else ''}",
             {"file_count": total, "folder": folder},
         )
+        batch_start = time.monotonic()
         for index, path in enumerate(files, start=1):
             base_progress = int(((index - 1) / total) * 95)
+            elapsed = time.monotonic() - batch_start
+            avg_per_video = elapsed / index if index > 1 else 0
+            eta_seconds = int(avg_per_video * (total - index)) if avg_per_video else None
 
             progress(
                 "batch",
                 base_progress,
                 f"Processing {path.name} ({index} of {total})",
-                {"file": path.name, "index": index, "total": total},
+                {
+                    "file": path.name,
+                    "index": index,
+                    "total": total,
+                    "eta_seconds": eta_seconds,
+                },
             )
 
             def batch_progress(

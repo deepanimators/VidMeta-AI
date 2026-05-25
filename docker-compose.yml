@@ -1,16 +1,42 @@
 services:
   vidmeta:
     build: .
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${VIDMETA_API_PORT:-8000}:8000"
     environment:
       VIDMETA_MAX_UPLOAD_MB: "${VIDMETA_MAX_UPLOAD_MB:-2048}"
       VIDMETA_DATA_DIR: "/data"
+      VIDMETA_UPLOAD_DIR: "/data/uploads"
+      VIDMETA_PROCESSING_DIR: "/data/processing"
+      # Encryption key for secrets at rest. Auto-generated if not set (stored in /data/.secret_key).
+      # Set explicitly when you need portable/reproducible encryption across container restarts.
+      VIDMETA_SECRET_KEY: "${VIDMETA_SECRET_KEY:-}"
+      # Comma-separated allowed CORS origins. Defaults to * (all) if not set.
+      # Example: http://localhost:5173,https://yourdomain.com
+      VIDMETA_CORS_ORIGINS: "${VIDMETA_CORS_ORIGINS:-}"
+      # Colon-separated filesystem paths the service may access for local-path jobs.
+      # Defaults to /videos (mapped volume below).
+      VIDMETA_ALLOWED_PATHS: "${VIDMETA_ALLOWED_PATHS:-/videos}"
+      # Days to retain upload records (0 = never purge). Call POST /api/admin/cleanup to trigger.
+      VIDMETA_UPLOAD_RETENTION_DAYS: "${VIDMETA_UPLOAD_RETENTION_DAYS:-0}"
     volumes:
       - ./videos:/videos:ro
       - vidmeta-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
 
 volumes:
   vidmeta-data:

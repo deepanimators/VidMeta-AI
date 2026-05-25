@@ -11,6 +11,7 @@ from vidmeta.settings import AppSettings, database_path
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -73,7 +74,39 @@ CREATE TABLE IF NOT EXISTS metadata_outputs (
 CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id, id);
+CREATE INDEX IF NOT EXISTS idx_uploads_created_at ON uploads(created_at);
 """
+
+# Settings fields encrypted at rest.
+_SENSITIVE_PATHS: list[tuple[str, ...]] = [
+    ("provider_settings", "api_key"),
+    ("storage_settings", "s3_access_key_id"),
+    ("storage_settings", "s3_secret_access_key"),
+]
+
+
+def _encrypt_settings(data: dict[str, Any]) -> dict[str, Any]:
+    from vidmeta.security import encrypt_secret
+    data = json.loads(json.dumps(data))
+    for *parents, field in _SENSITIVE_PATHS:
+        node = data
+        for key in parents:
+            node = node.get(key, {})
+        if isinstance(node, dict) and node.get(field):
+            node[field] = encrypt_secret(node[field])
+    return data
+
+
+def _decrypt_settings(data: dict[str, Any]) -> dict[str, Any]:
+    from vidmeta.security import decrypt_secret
+    data = json.loads(json.dumps(data))
+    for *parents, field in _SENSITIVE_PATHS:
+        node = data
+        for key in parents:
+            node = node.get(key, {})
+        if isinstance(node, dict) and node.get(field):
+            node[field] = decrypt_secret(node[field])
+    return data
 
 
 class Database:
@@ -86,6 +119,7 @@ class Database:
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn
             conn.commit()
@@ -101,10 +135,14 @@ class Database:
             row = conn.execute("SELECT value_json FROM settings WHERE key = 'app'").fetchone()
         if not row:
             return AppSettings()
-        return AppSettings.model_validate_json(row["value_json"])
+        raw = json.loads(row["value_json"])
+        decrypted = _decrypt_settings(raw)
+        return AppSettings.model_validate(decrypted)
 
     def save_settings(self, settings: AppSettings) -> AppSettings:
-        payload = settings.model_dump_json()
+        raw = json.loads(settings.model_dump_json())
+        encrypted = _encrypt_settings(raw)
+        payload = json.dumps(encrypted)
         with self.connect() as conn:
             conn.execute(
                 """
@@ -159,6 +197,19 @@ class Database:
             row = conn.execute("SELECT * FROM uploads WHERE id = ?", (upload_id,)).fetchone()
         return dict(row) if row else None
 
+    def delete_expired_uploads(self, retention_days: int) -> int:
+        """Delete upload records older than retention_days. Returns count deleted."""
+        with self.connect() as conn:
+            result = conn.execute(
+                """
+                DELETE FROM uploads
+                WHERE created_at < datetime('now', ? || ' days')
+                AND status IN ('complete', 'stored', 'failed')
+                """,
+                (f"-{retention_days}",),
+            )
+        return result.rowcount
+
     def create_job(self, data: dict[str, Any]) -> dict[str, Any]:
         with self.connect() as conn:
             conn.execute(
@@ -209,6 +260,12 @@ class Database:
         params.append(job_id)
         with self.connect() as conn:
             conn.execute(f"UPDATE jobs SET {', '.join(assignments)} WHERE id = ?", params)
+
+    def delete_job(self, job_id: str) -> bool:
+        """Delete job and all cascade-linked records (events, transcript, metadata)."""
+        with self.connect() as conn:
+            result = conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        return result.rowcount > 0
 
     def add_job_event(
         self,

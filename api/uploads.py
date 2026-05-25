@@ -13,6 +13,35 @@ from vidmeta.settings import VIDEO_EXTENSIONS
 from vidmeta.storage.backends import maybe_archive_upload, upload_path
 
 
+# Pure-Python magic-byte video header detection — no system library required.
+# Checks the first 16 bytes of the file against known video signatures.
+def _is_valid_video_header(path: Path) -> bool:
+    try:
+        with path.open("rb") as f:
+            header = f.read(16)
+        if len(header) < 8:
+            return False
+        # MP4 / MOV / M4V — ftyp atom at offset 4
+        if header[4:8] == b"ftyp":
+            return True
+        # MKV / WebM — EBML magic bytes
+        if header[:4] == b"\x1aE\xdf\xa3":
+            return True
+        # AVI — RIFF container with AVI subtype
+        if header[:4] == b"RIFF" and header[8:12] == b"AVI ":
+            return True
+        # Ogg container (OGV)
+        if header[:4] == b"OggS":
+            return True
+        # MPEG-1 / MPEG-2 video
+        if header[:3] in (b"\x00\x00\x01", b"\x00\x00\x00\x01"):
+            return True
+        return False
+    except Exception:
+        # Never block a legitimate upload due to a read error.
+        return True
+
+
 def upload_router(db: Database) -> APIRouter:
     router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -33,6 +62,9 @@ def upload_router(db: Database) -> APIRouter:
                     target.unlink(missing_ok=True)
                     raise HTTPException(status_code=413, detail="Upload exceeds configured size limit")
                 out.write(chunk)
+        if not _is_valid_video_header(target):
+            target.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="File content does not match a supported video format")
         stored_path = maybe_archive_upload(target, upload_id, file.filename or target.name, settings.storage_settings)
         data = db.create_upload(
             {
@@ -123,7 +155,12 @@ def upload_router(db: Database) -> APIRouter:
             path.unlink(missing_ok=True)
             db.update_upload(upload_id, size_bytes=size, status="failed")
             raise HTTPException(status_code=413, detail="Upload exceeds configured size limit")
-        status = "complete" if upload["expected_size_bytes"] and size >= upload["expected_size_bytes"] else "uploading"
+        is_complete = bool(upload["expected_size_bytes"] and size >= upload["expected_size_bytes"])
+        if is_complete and not _is_valid_video_header(path):
+            path.unlink(missing_ok=True)
+            db.update_upload(upload_id, size_bytes=size, status="failed")
+            raise HTTPException(status_code=400, detail="File content does not match a supported video format")
+        status = "complete" if is_complete else "uploading"
         db.update_upload(upload_id, size_bytes=size, status=status)
         if status == "complete":
             stored_path = maybe_archive_upload(path, upload_id, upload["filename"], settings.storage_settings)
