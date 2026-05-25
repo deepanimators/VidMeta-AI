@@ -374,15 +374,19 @@ function App() {
   React.useEffect(() => {
     if (!selectedJob || (selectedJob.status !== "completed" && selectedJob.status !== "failed")) return;
     api<{ events?: JobEvent[] }>(`/api/jobs/${selectedJob.id}`).then((full) => {
-      const frames = full.events?.find((e) => e.stage === "frames");
-      const audio = full.events?.find((e) => e.stage === "audio");
-      const analysis = full.events?.find((e) => e.stage === "analysis" && e.details?.analysis_preview);
+      const all = full.events ?? [];
+      // Pick the last event for each stage that actually carries the relevant data.
+      const framesEv = all.filter((e) => e.stage === "frames" && e.details?.thumbnails?.length).pop()
+        ?? all.filter((e) => e.stage === "frames").pop();
+      const audioEv = all.filter((e) => e.stage === "audio" && e.details?.transcript_preview).pop()
+        ?? all.filter((e) => e.stage === "audio").pop();
+      const analysisEv = all.filter((e) => e.stage === "analysis" && e.details?.analysis_preview).pop();
       setLiveData({
-        thumbnails: frames?.details?.thumbnails ?? [],
-        videoMetadata: frames?.details?.video_metadata ?? {},
-        transcriptPreview: audio?.details?.transcript_preview ?? "",
-        analysisPreview: analysis?.details?.analysis_preview ?? "",
-        visionWarning: analysis?.details?.vision_warning ?? frames?.details?.vision_warning ?? "",
+        thumbnails: framesEv?.details?.thumbnails ?? [],
+        videoMetadata: framesEv?.details?.video_metadata ?? {},
+        transcriptPreview: audioEv?.details?.transcript_preview ?? "",
+        analysisPreview: analysisEv?.details?.analysis_preview ?? "",
+        visionWarning: analysisEv?.details?.vision_warning ?? framesEv?.details?.vision_warning ?? "",
       });
     }).catch(() => {});
   }, [selectedJob?.id, selectedJob?.status]);
@@ -793,7 +797,7 @@ function App() {
                 onVideoChange={updateVideo}
                 onSelectedPlatformsChange={setSelectedPlatforms}
               />
-              {uploadProgress > 0 && <div className="progress"><span style={{ width: `${uploadProgress}%` }} /></div>}
+              {uploadProgress > 0 && <div className="progress"><span style={{ "--progress": `${uploadProgress}%` } as React.CSSProperties} /></div>}
               <button type="button" className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length || !selectedPlatforms.length}><UploadCloud size={17} /> Upload and analyze</button>
             </section>
           )}
@@ -1017,7 +1021,7 @@ function PlatformPicker({
             <button
               type="button"
               role="tab"
-              aria-selected={isActive ? "true" : "false"}
+              aria-selected={isActive}
               className={`platform-tab ${isActive ? "active" : ""}`}
               key={group.title}
               onClick={() => setActiveGroupIndex(index)}
@@ -1096,7 +1100,7 @@ function JobProgressDetails({ job }: { job: Job }) {
         </div>
         <strong>{job.progress}%</strong>
       </div>
-      <div className="progress large"><span style={{ width: `${Math.max(0, Math.min(job.progress, 100))}%` }} /></div>
+      <div className="progress large"><span style={{ "--progress": `${Math.max(0, Math.min(job.progress, 100))}%` } as React.CSSProperties} /></div>
       <div className="job-stats">
         <span>Mode: {job.mode}</span>
         <span>Source: {job.source_type}</span>
@@ -1437,8 +1441,11 @@ function titleize(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char: string) => char.toUpperCase());
 }
 
+const DETAIL_SKIP = new Set(["thumbnails", "video_metadata", "transcript_preview", "analysis_preview"]);
+
 function formatDetails(details: Record<string, unknown>) {
   return Object.entries(details)
+    .filter(([key]) => !DETAIL_SKIP.has(key))
     .map(([key, value]) => `${stageLabel(key)}: ${String(value)}`)
     .join(" / ");
 }
