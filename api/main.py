@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from api.jobs import JobRunner
-from api.models import JobRequest, UploadJobRequest
+from api.models import JobRequest, RetryJobRequest, UploadJobRequest
 from api.uploads import upload_router
 from vidmeta.exports.builders import export_csv, export_json, export_txt
 from vidmeta.service.database import Database
@@ -155,6 +155,19 @@ async def get_job_result(job_id: str) -> dict:
     if not result.get("metadata"):
         raise HTTPException(status_code=409, detail="Job result is not ready")
     return result
+
+
+@app.post("/api/jobs/{job_id}/retry")
+@limiter.limit("30/minute")
+async def retry_job(job_id: str, payload: RetryJobRequest, request: Request) -> dict:
+    """Create a new job from a failed job, optionally with a different provider/model."""
+    try:
+        override = payload.provider_settings.model_dump() if payload.provider_settings else None
+        return runner.retry_job(job_id, override)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.delete("/api/jobs/{job_id}")

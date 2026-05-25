@@ -13,6 +13,7 @@ import {
   Settings,
   UploadCloud,
   Video,
+  RotateCcw,
   X as XIcon
 } from "lucide-react";
 import "./styles.css";
@@ -111,6 +112,12 @@ type Job = {
   updated_at?: string;
   completed_at?: string | null;
   events?: JobEvent[];
+  request?: {
+    provider_settings?: ProviderSettings;
+    brand_context?: BrandContext;
+    video_settings?: VideoSettings;
+    target_platforms?: string[];
+  };
 };
 
 type JobResult = Job & {
@@ -587,6 +594,21 @@ function App() {
     }
   }
 
+  async function retryJob(jobId: string, providerSettings?: ProviderSettings) {
+    try {
+      const body = providerSettings ? { provider_settings: providerSettings } : {};
+      const job = await api<Job>(`/api/jobs/${jobId}/retry`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setSelectedJobId(job.id);
+      setMessage("Job retried");
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Retry failed");
+    }
+  }
+
   async function deleteJob(jobId: string) {
     try {
       await api(`/api/jobs/${jobId}`, { method: "DELETE" });
@@ -790,6 +812,17 @@ function App() {
                   </span>
                   <span className="job-progress">{job.progress}%</span>
                 </button>
+                {job.status === "failed" && (
+                  <button
+                    type="button"
+                    className="job-retry"
+                    title="Retry job"
+                    aria-label="Retry job"
+                    onClick={(e) => { e.stopPropagation(); void retryJob(job.id); }}
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="job-delete"
@@ -805,6 +838,12 @@ function App() {
             {!jobs.length && <p className="muted">No jobs yet.</p>}
           </div>
           {selectedJobDetails && <JobProgressDetails job={selectedJobDetails} />}
+          {selectedJob?.status === "failed" && (
+            <RetryPanel
+              job={selectedJob}
+              onRetry={(ps) => void retryJob(selectedJob.id, ps)}
+            />
+          )}
         </section>
 
         {liveData && <section className="panel"><LiveExtractionPanel data={liveData} /></section>}
@@ -1149,6 +1188,71 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
           <div className="live-text">{analysisPreview}</div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSettings) => void }) {
+  const orig = job.request?.provider_settings;
+  const [provider, setProvider] = React.useState(orig?.provider ?? "ollama");
+  const [model, setModel] = React.useState(orig?.model ?? DEFAULT_MODEL_BY_PROVIDER.ollama);
+  const [apiKey, setApiKey] = React.useState(orig?.api_key ?? "");
+  const [apiBase, setApiBase] = React.useState(orig?.api_base ?? "");
+  const [ollamaUrl, setOllamaUrl] = React.useState(orig?.ollama_url ?? "http://localhost:11434");
+
+  function handleProviderChange(next: string) {
+    setProvider(next);
+    setModel(DEFAULT_MODEL_BY_PROVIDER[next] ?? "");
+  }
+
+  const modelValue = selectedModelValue(provider, model);
+
+  function buildSettings(): ProviderSettings {
+    return { provider, model, api_key: apiKey, api_base: apiBase, ollama_url: ollamaUrl };
+  }
+
+  return (
+    <div className="retry-panel">
+      <div className="retry-panel-head">
+        <RotateCcw size={15} />
+        <strong>Retry with different settings</strong>
+      </div>
+      <div className="retry-fields">
+        <select aria-label="Retry provider" value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
+          <option value="ollama">Ollama local</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="gemini">Gemini</option>
+        </select>
+        <select aria-label="Retry model" value={modelValue} onChange={(e) => { if (e.target.value === CUSTOM_MODEL_VALUE) { setModel(""); } else { setModel(e.target.value); } }}>
+          {(MODEL_PRESETS[provider] ?? []).map((m) => (
+            <option value={m.value} key={m.value}>{m.label}{m.note ? ` - ${m.note}` : ""}</option>
+          ))}
+          <option value={CUSTOM_MODEL_VALUE}>Other custom model</option>
+        </select>
+        {modelValue === CUSTOM_MODEL_VALUE && (
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Enter model ID" />
+        )}
+        {provider === "ollama" ? (
+          <input value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)} placeholder="Ollama URL" />
+        ) : (
+          <>
+            <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key" type="password" />
+            {["openrouter", "openai"].includes(provider) && (
+              <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="API base URL (optional)" />
+            )}
+          </>
+        )}
+      </div>
+      <div className="retry-actions">
+        <button type="button" className="secondary" onClick={() => onRetry()}>
+          <RotateCcw size={14} /> Retry same settings
+        </button>
+        <button type="button" className="primary" onClick={() => onRetry(buildSettings())}>
+          <RotateCcw size={14} /> Retry with above settings
+        </button>
+      </div>
     </div>
   );
 }

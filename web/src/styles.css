@@ -624,6 +624,23 @@ button:disabled {
   border-color: #fecaca;
 }
 
+.job-retry {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.job-retry:hover {
+  opacity: 1;
+  background: #eff6ff;
+  color: var(--accent);
+  border-color: #bed8ff;
+}
+
 .inline-label {
   display: flex;
   flex-direction: column;
@@ -958,6 +975,57 @@ button:disabled {
   white-space: pre-wrap;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.retry-panel {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.retry-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f6fafc;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.retry-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.retry-fields select,
+.retry-fields input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.retry-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: #f6fafc;
+}
+
+.retry-actions button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 details {

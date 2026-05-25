@@ -100,6 +100,35 @@ class JobRunner:
         self.enqueue(job_id)
         return job
 
+    def retry_job(self, job_id: str, provider_override: dict | None = None) -> dict:
+        job = self.db.get_job(job_id)
+        if not job:
+            raise FileNotFoundError(f"Job not found: {job_id}")
+        if job["status"] != "failed":
+            raise ValueError(f"Only failed jobs can be retried (current status: {job['status']})")
+        source_path = job["source_path"]
+        if not Path(source_path).exists():
+            raise FileNotFoundError(f"Source file no longer exists: {source_path}")
+        # Merge provider override so the new job uses the chosen model.
+        request = dict(job.get("request", {}))
+        if provider_override:
+            request["provider_settings"] = provider_override
+        new_id = uuid.uuid4().hex
+        new_job = self.db.create_job(
+            {
+                "id": new_id,
+                "source_type": job["source_type"],
+                "source_path": source_path,
+                "mode": job.get("mode", "single"),
+                "status": "queued",
+                "stage": "queued",
+                "progress": 0,
+                "request": request,
+            }
+        )
+        self.enqueue(new_id)
+        return new_job
+
     def enqueue(self, job_id: str) -> None:
         with self._lock:
             future = self.executor.submit(self._run, job_id)

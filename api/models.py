@@ -28,6 +28,10 @@ class CreateResumableUploadRequest(BaseModel):
     size_bytes: int | None = None
 
 
+class RetryJobRequest(BaseModel):
+    provider_settings: ProviderSettings | None = None
+
+
 class JobSummary(BaseModel):
     id: str
     source_type: str
