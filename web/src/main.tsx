@@ -797,7 +797,7 @@ function App() {
                 onVideoChange={updateVideo}
                 onSelectedPlatformsChange={setSelectedPlatforms}
               />
-              {uploadProgress > 0 && <div className="progress"><span style={{ "--progress": `${uploadProgress}%` } as React.CSSProperties} /></div>}
+              {uploadProgress > 0 && <progress className="progress-bar" value={uploadProgress} max={100} />}
               <button type="button" className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length || !selectedPlatforms.length}><UploadCloud size={17} /> Upload and analyze</button>
             </section>
           )}
@@ -1100,7 +1100,7 @@ function JobProgressDetails({ job }: { job: Job }) {
         </div>
         <strong>{job.progress}%</strong>
       </div>
-      <div className="progress large"><span style={{ "--progress": `${Math.max(0, Math.min(job.progress, 100))}%` } as React.CSSProperties} /></div>
+      <progress className="progress-bar large" value={Math.max(0, Math.min(job.progress, 100))} max={100} />
       <div className="job-stats">
         <span>Mode: {job.mode}</span>
         <span>Source: {job.source_type}</span>

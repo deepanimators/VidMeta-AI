@@ -559,6 +559,38 @@ button:disabled {
   width: var(--progress, 0%);
 }
 
+progress.progress-bar {
+  display: block;
+  width: 100%;
+  height: 8px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 12px 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #e6edf5;
+}
+
+progress.progress-bar::-webkit-progress-bar {
+  background: #e6edf5;
+  border-radius: 999px;
+}
+
+progress.progress-bar::-webkit-progress-value {
+  background: var(--accent-2);
+  border-radius: 999px;
+}
+
+progress.progress-bar::-moz-progress-bar {
+  background: var(--accent-2);
+  border-radius: 999px;
+}
+
+progress.progress-bar.large {
+  margin: 0 0 12px;
+}
+
 .warning {
   display: flex;
   gap: 8px;
