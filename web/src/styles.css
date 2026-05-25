@@ -567,8 +567,8 @@ progress.progress-bar {
   border-radius: 999px;
   overflow: hidden;
   margin: 12px 0;
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   background: #e6edf5;
 }
 
