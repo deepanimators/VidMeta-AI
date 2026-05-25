@@ -369,6 +369,34 @@ button:disabled {
   font-weight: 700;
 }
 
+.mini-button.danger {
+  border-color: #fca5a5;
+  color: var(--danger);
+}
+
+.mini-button.danger:hover {
+  background: #fef2f2;
+}
+
+.jobs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.jobs-header h2 {
+  margin: 0;
+}
+
+.jobs-header h2 em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
 .selected-platforms {
   min-height: 44px;
   display: flex;

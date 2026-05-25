@@ -79,6 +79,19 @@ def call_llm(
     raise ValueError(f"Unsupported provider: {config.provider}")
 
 
+def _clean_api_error(exc: BaseException) -> str:
+    """Extract the human-readable message from OpenAI/Anthropic SDK status errors."""
+    try:
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            msg = (body.get("error") or {}).get("message") or body.get("message")
+            if msg:
+                return str(msg)
+    except Exception:
+        pass
+    return getattr(exc, "message", None) or str(exc)
+
+
 def _call_ollama(frames: list[str], prompt: str, url: str, model: str, max_tokens: int) -> str:
     import requests
     base_url = url.rstrip("/")
@@ -103,7 +116,7 @@ def _call_ollama(frames: list[str], prompt: str, url: str, model: str, max_token
 def _call_openai_compat(
     frames: list[str], prompt: str, api_key: str, model: str, base_url: str, max_tokens: int
 ) -> str:
-    from openai import OpenAI
+    from openai import APIStatusError, OpenAI
     client = OpenAI(api_key=api_key, base_url=base_url)
     content: list[dict] = [
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}", "detail": "high"}}
@@ -115,12 +128,15 @@ def _call_openai_compat(
         if _is_openai_base_url(base_url)
         else {"max_tokens": max_tokens}
     )
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": content}],
-        **token_param,
-    )
-    return response.choices[0].message.content or ""
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            **token_param,
+        )
+        return response.choices[0].message.content or ""
+    except APIStatusError as exc:
+        raise RuntimeError(_clean_api_error(exc)) from exc
 
 
 def _is_openai_base_url(base_url: str) -> bool:
@@ -135,11 +151,14 @@ def _call_anthropic(frames: list[str], prompt: str, api_key: str, model: str, ma
         for frame in frames[:20]
     ]
     content.append({"type": "text", "text": prompt})
-    response = client.messages.create(
-        model=model, max_tokens=max_tokens,
-        messages=[{"role": "user", "content": content}],
-    )
-    return response.content[0].text
+    try:
+        response = client.messages.create(
+            model=model, max_tokens=max_tokens,
+            messages=[{"role": "user", "content": content}],
+        )
+        return response.content[0].text
+    except anthropic.APIStatusError as exc:
+        raise RuntimeError(_clean_api_error(exc)) from exc
 
 
 def _call_gemini(

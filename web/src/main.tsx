@@ -625,6 +625,20 @@ function App() {
     }
   }
 
+  async function clearFailedJobs() {
+    const failedIds = jobs.filter((j) => j.status === "failed").map((j) => j.id);
+    if (!failedIds.length) return;
+    try {
+      await Promise.all(failedIds.map((id) => api(`/api/jobs/${id}`, { method: "DELETE" })));
+      if (result && failedIds.includes(result.id)) setResult(null);
+      setSelectedJobId((current) => (failedIds.includes(current) ? "" : current));
+      await refresh();
+      setMessage(`Cleared ${failedIds.length} failed job${failedIds.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Clear failed");
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -804,7 +818,14 @@ function App() {
         </div>
 
         <section className="panel">
-          <h2><History size={19} /> Jobs</h2>
+          <div className="jobs-header">
+            <h2><History size={19} /> Jobs <em>{jobs.length}</em></h2>
+            {jobs.some((j) => j.status === "failed") && (
+              <button type="button" className="mini-button danger" onClick={() => void clearFailedJobs()}>
+                Clear failed
+              </button>
+            )}
+          </div>
           <div className="jobs">
             {jobs.map((job) => (
               <div key={job.id} className={`job-row ${selectedJob?.id === job.id ? "selected" : ""}`}>
