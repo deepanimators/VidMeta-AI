@@ -53,6 +53,7 @@ type StorageSettings = {
 type AppSettings = {
   app_mode: string;
   max_upload_mb: number;
+  upload_retention_days: number;
   brand_context: BrandContext;
   video_settings: VideoSettings;
   provider_settings: ProviderSettings;
@@ -214,26 +215,39 @@ const DEFAULT_MODEL_BY_PROVIDER = Object.fromEntries(
   Object.entries(MODEL_PRESETS).map(([provider, models]) => [provider, models[0]?.value ?? ""])
 ) as Record<string, string>;
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: init?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
-    ...init
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || response.statusText);
+async function api<T>(path: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      signal: controller.signal,
+      headers: init?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
+      ...init
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || response.statusText);
+    }
+    return response.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Request timed out. The service may be busy.");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
   }
-  return response.json() as Promise<T>;
 }
 
 const defaultSettings: AppSettings = {
   app_mode: "local",
   max_upload_mb: 2048,
+  upload_retention_days: 0,
   brand_context: {
-    brand_name: "Condenast",
-    brand_niche: "Kids fashion & clothing, India",
-    target_audience: "Mothers, parents, India",
-    tone: "Fun & playful"
+    brand_name: "",
+    brand_niche: "",
+    target_audience: "",
+    tone: ""
   },
   video_settings: {
     use_whisper: true,
@@ -292,8 +306,15 @@ function App() {
     void refresh();
     void loadSettings();
     void detectDesktopPicker();
-    const timer = window.setInterval(refresh, 2500);
-    return () => window.clearInterval(timer);
+    // Adaptive polling: fast when jobs are active, slow when idle.
+    let timer: number;
+    function scheduleNext() {
+      const hasActive = jobs.some((j) => j.status === "running" || j.status === "queued");
+      timer = window.setTimeout(() => { void refresh().then(scheduleNext); }, hasActive ? 2000 : 15000);
+    }
+    scheduleNext();
+    return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
@@ -473,6 +494,18 @@ function App() {
     }
   }
 
+  async function deleteJob(jobId: string) {
+    try {
+      await api(`/api/jobs/${jobId}`, { method: "DELETE" });
+      if (result?.id === jobId) setResult(null);
+      setSelectedJobId((current) => (current === jobId ? "" : current));
+      await refresh();
+      setMessage("Job deleted");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Delete failed");
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -560,6 +593,15 @@ function App() {
               <input value={settings.storage_settings.s3_secret_access_key} onChange={(event) => updateStorage("s3_secret_access_key", event.target.value)} placeholder="Secret key" type="password" />
             </div>
           )}
+          <label className="inline-label">
+            Upload retention (days, 0 = keep forever)
+            <input
+              type="number"
+              min={0}
+              value={settings.upload_retention_days}
+              onChange={(e) => updateSettings("upload_retention_days", Number(e.target.value))}
+            />
+          </label>
           <button className="secondary" onClick={saveSettings} disabled={busy}><Save size={16} /> Save settings</button>
         </section>
       </aside>
@@ -639,14 +681,24 @@ function App() {
           <h2><History size={19} /> Jobs</h2>
           <div className="jobs">
             {jobs.map((job) => (
-              <button key={job.id} className={`job-row ${selectedJob?.id === job.id ? "selected" : ""}`} onClick={() => setSelectedJobId(job.id)}>
-                <span className={`dot ${job.status}`} />
-                <span className="job-main">
-                  <strong>{job.source_path.split("/").pop()}</strong>
-                  <small>{job.status} / {job.stage}</small>
-                </span>
-                <span className="job-progress">{job.progress}%</span>
-              </button>
+              <div key={job.id} className={`job-row ${selectedJob?.id === job.id ? "selected" : ""}`}>
+                <button className="job-row-select" onClick={() => setSelectedJobId(job.id)}>
+                  <span className={`dot ${job.status}`} />
+                  <span className="job-main">
+                    <strong>{job.source_path.split("/").pop()}</strong>
+                    <small>{job.status} / {job.stage}</small>
+                  </span>
+                  <span className="job-progress">{job.progress}%</span>
+                </button>
+                <button
+                  className="job-delete"
+                  title="Delete job"
+                  disabled={job.status === "running"}
+                  onClick={(e) => { e.stopPropagation(); void deleteJob(job.id); }}
+                >
+                  <XIcon size={13} />
+                </button>
+              </div>
             ))}
             {!jobs.length && <p className="muted">No jobs yet.</p>}
           </div>
@@ -1121,7 +1173,20 @@ function formatDate(value: string) {
 
 async function uploadResumable(url: string, file: File, onProgress: (progress: number) => void) {
   const chunkSize = 8 * 1024 * 1024;
+
+  // HEAD to check current offset — enables actual resume of interrupted uploads.
   let offset = 0;
+  const headResponse = await fetch(url, {
+    method: "HEAD",
+    headers: { "Tus-Resumable": "1.0.0" }
+  });
+  if (headResponse.ok) {
+    const serverOffset = Number(headResponse.headers.get("Upload-Offset") ?? "0");
+    if (!Number.isNaN(serverOffset) && serverOffset > 0 && serverOffset < file.size) {
+      offset = serverOffset;
+    }
+  }
+
   while (offset < file.size) {
     const chunk = file.slice(offset, offset + chunkSize);
     const response = await fetch(url, {

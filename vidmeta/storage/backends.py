@@ -34,6 +34,18 @@ def materialize_for_processing(stored_path: str, upload_id: str, filename: str, 
     raise ValueError(f"Unsupported storage backend: {settings.backend}")
 
 
+def cleanup_processing_file(processing_file_path: str) -> None:
+    """Remove a temp file materialized for processing (S3-backed jobs only)."""
+    try:
+        p = Path(processing_file_path)
+        proc_dir = processing_dir()
+        # Only delete files inside the designated processing directory.
+        if p.exists() and p.resolve().is_relative_to(proc_dir.resolve()):
+            p.unlink()
+    except Exception:
+        pass
+
+
 def import_local_file_if_needed(source: str, job_id: str, settings: StorageSettings) -> str:
     if not settings.import_local_files:
         return source

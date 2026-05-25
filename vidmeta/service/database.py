@@ -75,6 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id, id);
 CREATE INDEX IF NOT EXISTS idx_uploads_created_at ON uploads(created_at);
+CREATE INDEX IF NOT EXISTS idx_uploads_status ON uploads(status);
 """
 
 # Settings fields encrypted at rest.
@@ -83,6 +84,9 @@ _SENSITIVE_PATHS: list[tuple[str, ...]] = [
     ("storage_settings", "s3_access_key_id"),
     ("storage_settings", "s3_secret_access_key"),
 ]
+
+# Max events stored per job. Oldest events beyond this are dropped during insert.
+_MAX_EVENTS_PER_JOB = 200
 
 
 def _encrypt_settings(data: dict[str, Any]) -> dict[str, Any]:
@@ -117,7 +121,8 @@ class Database:
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.path, check_same_thread=False)
+        # timeout: wait up to 10 s when another thread holds the write lock
+        conn = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         try:
@@ -210,6 +215,19 @@ class Database:
             )
         return result.rowcount
 
+    def delete_orphaned_uploads(self, max_age_hours: int = 24) -> int:
+        """Delete uploads stuck in 'created' state older than max_age_hours (interrupted uploads)."""
+        with self.connect() as conn:
+            result = conn.execute(
+                """
+                DELETE FROM uploads
+                WHERE status = 'created'
+                AND created_at < datetime('now', ? || ' hours')
+                """,
+                (f"-{max_age_hours}",),
+            )
+        return result.rowcount
+
     def create_job(self, data: dict[str, Any]) -> dict[str, Any]:
         with self.connect() as conn:
             conn.execute(
@@ -283,6 +301,17 @@ class Database:
                 """,
                 (job_id, stage, progress, message, json.dumps(details or {})),
             )
+            # Prune oldest events beyond cap to prevent unbounded growth on long batch jobs.
+            conn.execute(
+                """
+                DELETE FROM job_events
+                WHERE job_id = ?
+                AND id NOT IN (
+                    SELECT id FROM job_events WHERE job_id = ? ORDER BY id DESC LIMIT ?
+                )
+                """,
+                (job_id, job_id, _MAX_EVENTS_PER_JOB),
+            )
 
     def list_job_events(self, job_id: str) -> list[dict[str, Any]]:
         with self.connect() as conn:
@@ -295,17 +324,25 @@ class Database:
                 """,
                 (job_id,),
             ).fetchall()
-        events: list[dict[str, Any]] = []
-        for row in rows:
-            item = dict(row)
-            item["details"] = json.loads(item.pop("details_json") or "{}")
-            events.append(item)
-        return events
+        return _decode_events(rows)
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        return self._with_events(self._decode_job(row)) if row else None
+            if not row:
+                return None
+            # Load events in same connection to avoid extra round-trip
+            event_rows = conn.execute(
+                """
+                SELECT id, job_id, stage, progress, message, details_json, created_at
+                FROM job_events WHERE job_id = ? ORDER BY id ASC
+                """,
+                (job_id,),
+            ).fetchall()
+        job = self._decode_job(row)
+        events = _decode_events(event_rows)
+        job["events"] = events or [_fallback_event(job)]
+        return job
 
     def list_jobs(self, limit: int = 50) -> list[dict[str, Any]]:
         with self.connect() as conn:
@@ -313,7 +350,31 @@ class Database:
                 "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [self._with_events(self._decode_job(row)) for row in rows]
+            if not rows:
+                return []
+            job_ids = [row["id"] for row in rows]
+            placeholders = ",".join("?" * len(job_ids))
+            event_rows = conn.execute(
+                f"""
+                SELECT id, job_id, stage, progress, message, details_json, created_at
+                FROM job_events
+                WHERE job_id IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                job_ids,
+            ).fetchall()
+
+        events_by_job: dict[str, list[dict[str, Any]]] = {row["id"]: [] for row in rows}
+        for event in _decode_events(event_rows):
+            events_by_job.setdefault(event["job_id"], []).append(event)
+
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            job = self._decode_job(row)
+            events = events_by_job.get(job["id"], [])
+            job["events"] = events or [_fallback_event(job)]
+            result.append(job)
+        return result
 
     def save_result(self, job_id: str, transcript: str, analysis: str, metadata: dict[str, Any], raw: str | None) -> None:
         with self.connect() as conn:
@@ -349,31 +410,23 @@ class Database:
                 """,
                 (job_id,),
             ).fetchone()
-        if not row:
-            return None
+            if not row:
+                return None
+            event_rows = conn.execute(
+                """
+                SELECT id, job_id, stage, progress, message, details_json, created_at
+                FROM job_events WHERE job_id = ? ORDER BY id ASC
+                """,
+                (job_id,),
+            ).fetchall()
         data = self._decode_job(row)
         data["transcript"] = row["transcript"] or ""
         data["analysis"] = row["analysis"] or ""
         data["metadata"] = json.loads(row["metadata_json"]) if row["metadata_json"] else None
         data["raw_output"] = row["raw_output"]
-        return self._with_events(data)
-
-    def _with_events(self, job: dict[str, Any]) -> dict[str, Any]:
-        events = self.list_job_events(job["id"])
-        if not events:
-            events = [
-                {
-                    "id": 0,
-                    "job_id": job["id"],
-                    "stage": job.get("stage", "queued"),
-                    "progress": int(job.get("progress") or 0),
-                    "message": _fallback_event_message(job),
-                    "details": {"source_type": job.get("source_type"), "mode": job.get("mode")},
-                    "created_at": job.get("updated_at") or job.get("created_at"),
-                }
-            ]
-        job["events"] = events
-        return job
+        events = _decode_events(event_rows)
+        data["events"] = events or [_fallback_event(data)]
+        return data
 
     @staticmethod
     def _decode_job(row: sqlite3.Row) -> dict[str, Any]:
@@ -382,11 +435,30 @@ class Database:
         return data
 
 
-def _fallback_event_message(job: dict[str, Any]) -> str:
+def _decode_events(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["details"] = json.loads(item.pop("details_json") or "{}")
+        events.append(item)
+    return events
+
+
+def _fallback_event(job: dict[str, Any]) -> dict[str, Any]:
     status = str(job.get("status") or "queued")
     stage = str(job.get("stage") or status)
     if status == "completed":
-        return "Job completed. Detailed timeline was not recorded for this job."
-    if status == "failed":
-        return str(job.get("error_message") or "Job failed. Detailed timeline was not recorded for this job.")
-    return f"Job is {status} at {stage}. Detailed timeline has not been recorded yet."
+        message = "Job completed. Detailed timeline was not recorded for this job."
+    elif status == "failed":
+        message = str(job.get("error_message") or "Job failed. Detailed timeline was not recorded for this job.")
+    else:
+        message = f"Job is {status} at {stage}. Detailed timeline has not been recorded yet."
+    return {
+        "id": 0,
+        "job_id": job["id"],
+        "stage": stage,
+        "progress": int(job.get("progress") or 0),
+        "message": message,
+        "details": {"source_type": job.get("source_type"), "mode": job.get("mode")},
+        "created_at": job.get("updated_at") or job.get("created_at"),
+    }

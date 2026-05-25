@@ -136,9 +136,14 @@ async def export_job(job_id: str, format_name: str) -> PlainTextResponse:
 
 @app.post("/api/admin/cleanup")
 async def run_cleanup() -> dict:
-    """Purge upload records older than the configured retention window."""
+    """Purge expired upload records and interrupted (orphaned) uploads."""
     settings = db.get_settings()
-    if settings.upload_retention_days <= 0:
-        return {"skipped": True, "reason": "upload_retention_days is 0 (disabled)"}
-    deleted = db.delete_expired_uploads(settings.upload_retention_days)
-    return {"deleted_uploads": deleted, "retention_days": settings.upload_retention_days}
+    expired = 0
+    if settings.upload_retention_days > 0:
+        expired = db.delete_expired_uploads(settings.upload_retention_days)
+    orphaned = db.delete_orphaned_uploads(max_age_hours=24)
+    return {
+        "deleted_expired_uploads": expired,
+        "deleted_orphaned_uploads": orphaned,
+        "retention_days": settings.upload_retention_days,
+    }

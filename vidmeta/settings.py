@@ -47,7 +47,7 @@ def allowed_paths() -> list[Path] | None:
 
 
 class BrandContext(BaseModel):
-    brand_name: str = "Condenast"
+    brand_name: str = ""
     brand_niche: str = ""
     target_audience: str = ""
     tone: str = ""

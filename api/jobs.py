@@ -12,7 +12,8 @@ from vidmeta.ai.prompts import normalize_platforms
 from vidmeta.service.database import Database
 from vidmeta.service.pipeline import analyze_video
 from vidmeta.settings import VIDEO_EXTENSIONS, AppSettings, BrandContext, ProviderSettings, VideoSettings, allowed_paths
-from vidmeta.storage.backends import import_local_file_if_needed, materialize_for_processing
+from vidmeta.storage.backends import cleanup_processing_file, import_local_file_if_needed, materialize_for_processing
+from vidmeta.video.validation import is_valid_video_header
 
 
 def _validate_path(path: Path) -> None:
@@ -41,9 +42,12 @@ class JobRunner:
         _validate_path(source_path)
         if not source_path.exists():
             raise FileNotFoundError(f"Path does not exist: {source_path}")
-        if source_path.is_file() and source_path.suffix.lower() not in VIDEO_EXTENSIONS:
-            raise ValueError(f"Unsupported video type: {source_path.suffix}")
-        if source_path.is_dir() and not self._video_files(source_path):
+        if source_path.is_file():
+            if source_path.suffix.lower() not in VIDEO_EXTENSIONS:
+                raise ValueError(f"Unsupported video type: {source_path.suffix}")
+            if not is_valid_video_header(source_path):
+                raise ValueError(f"File does not appear to be a valid video: {source_path.name}")
+        elif source_path.is_dir() and not self._video_files(source_path):
             raise ValueError("Folder does not contain supported video files")
 
         job_id = uuid.uuid4().hex
@@ -100,12 +104,19 @@ class JobRunner:
         with self._lock:
             future = self.executor.submit(self._run, job_id)
             self._futures[job_id] = future
+            # Remove completed future from dict to prevent unbounded memory growth.
+            future.add_done_callback(lambda _f: self._remove_future(job_id))
+
+    def _remove_future(self, job_id: str) -> None:
+        with self._lock:
+            self._futures.pop(job_id, None)
 
     def _run(self, job_id: str) -> None:
         job = self.db.get_job(job_id)
         if not job:
             return
         request = job["request"]
+        processing_temp: str | None = None
         try:
             self._record_progress(job_id, "starting", 1, "Preparing job settings and source")
             settings = self.db.get_settings()
@@ -113,6 +124,10 @@ class JobRunner:
             video = request.get("video_settings") or settings.video_settings.model_dump()
             provider = request.get("provider_settings") or settings.provider_settings.model_dump()
             target_platforms = normalize_platforms(request.get("target_platforms"))
+
+            # Track S3 temp files for cleanup on failure
+            if job.get("source_type") == "upload" and settings.storage_settings.backend == "s3_compatible":
+                processing_temp = job["source_path"]
 
             def progress(
                 stage: str,
@@ -168,6 +183,9 @@ class JobRunner:
                 completed_at="CURRENT_TIMESTAMP",
             )
             self.db.add_job_event(job_id, "failed", int(current.get("progress") or 0), str(exc))
+        finally:
+            if processing_temp:
+                cleanup_processing_file(processing_temp)
 
     def _record_progress(
         self,

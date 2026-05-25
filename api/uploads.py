@@ -11,35 +11,7 @@ from api.models import CreateResumableUploadRequest
 from vidmeta.service.database import Database
 from vidmeta.settings import VIDEO_EXTENSIONS
 from vidmeta.storage.backends import maybe_archive_upload, upload_path
-
-
-# Pure-Python magic-byte video header detection — no system library required.
-# Checks the first 16 bytes of the file against known video signatures.
-def _is_valid_video_header(path: Path) -> bool:
-    try:
-        with path.open("rb") as f:
-            header = f.read(16)
-        if len(header) < 8:
-            return False
-        # MP4 / MOV / M4V — ftyp atom at offset 4
-        if header[4:8] == b"ftyp":
-            return True
-        # MKV / WebM — EBML magic bytes
-        if header[:4] == b"\x1aE\xdf\xa3":
-            return True
-        # AVI — RIFF container with AVI subtype
-        if header[:4] == b"RIFF" and header[8:12] == b"AVI ":
-            return True
-        # Ogg container (OGV)
-        if header[:4] == b"OggS":
-            return True
-        # MPEG-1 / MPEG-2 video
-        if header[:3] in (b"\x00\x00\x01", b"\x00\x00\x00\x01"):
-            return True
-        return False
-    except Exception:
-        # Never block a legitimate upload due to a read error.
-        return True
+from vidmeta.video.validation import is_valid_video_header as _is_valid_video_header
 
 
 def upload_router(db: Database) -> APIRouter:

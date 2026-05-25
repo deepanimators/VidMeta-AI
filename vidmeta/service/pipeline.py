@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,6 +30,9 @@ def analyze_video(
     progress: Callable[[str, int, str, dict[str, Any] | None], None] | None = None,
 ) -> dict:
     file_path = str(Path(path).expanduser())
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Video file not found or is not a file: {file_path}")
+
     selected_platforms = normalize_platforms(target_platforms)
 
     _progress(progress, "frames", 10, "Extracting representative video frames")
