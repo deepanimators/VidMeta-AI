@@ -201,6 +201,7 @@ web/tsconfig.tsbuildinfo
 desktop/node_modules/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+desktop/src-tauri/binaries/
 
 # PyPI configuration file
 .pypirc

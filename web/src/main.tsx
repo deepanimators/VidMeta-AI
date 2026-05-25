@@ -126,7 +126,10 @@ type JobResult = Job & {
   metadata: Record<string, unknown>;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const _isTauri = typeof window !== "undefined" && Boolean(
+  (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+);
+const API_BASE = _isTauri ? "http://127.0.0.1:8000" : (import.meta.env.VITE_API_BASE ?? "");
 const CUSTOM_MODEL_VALUE = "__custom__";
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm", "m4v"]);
 

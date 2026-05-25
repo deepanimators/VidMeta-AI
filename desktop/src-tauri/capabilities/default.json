@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default desktop permissions",
   "windows": ["main"],
-  "permissions": ["dialog:default"]
+  "permissions": ["dialog:default", "shell:allow-execute", "shell:allow-kill"]
 }

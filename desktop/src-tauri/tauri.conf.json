@@ -6,7 +6,6 @@
   "build": {
     "beforeDevCommand": "cd ../web && npm run dev -- --host 127.0.0.1 --port 5173 --strictPort",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd ../web && npm run build",
     "frontendDist": "../../web/dist"
   },
   "app": {
@@ -25,8 +24,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": [],
+    "targets": ["app", "dmg", "nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/vidmeta-server"],
     "windows": {
       "nsis": {
         "installMode": "both"
