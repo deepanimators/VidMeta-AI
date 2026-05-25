@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-desktop:
     strategy:
@@ -98,9 +101,6 @@ jobs:
         run: |
           npx tauri icon src-tauri/icons/icon.png
           npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       # ── Upload artifacts ──────────────────────────────────────────────────
       - name: Upload macOS artifacts
