@@ -76,6 +76,8 @@ def call_llm(
         return _call_anthropic(frames, prompt, config.api_key, config.model, max_tokens)
     if provider == "gemini":
         return _call_gemini(frames, prompt, config.api_key, config.model, max_tokens, video_path)
+    if provider == "nvidia":
+        return _call_nvidia(frames, prompt, config.api_key, config.model, max_tokens)
     raise ValueError(f"Unsupported provider: {config.provider}")
 
 
@@ -141,6 +143,27 @@ def _call_openai_compat(
 
 def _is_openai_base_url(base_url: str) -> bool:
     return base_url.rstrip("/").lower() == "https://api.openai.com/v1"
+
+
+def _call_nvidia(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+    """Call NVIDIA NIM API — OpenAI-compatible endpoint with 5-image limit."""
+    from openai import APIStatusError, OpenAI
+    client = OpenAI(api_key=api_key, base_url="https://integrate.api.nvidia.com/v1")
+    # NIM default max is 5 images per request.
+    content: list[dict] = [
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}"}}
+        for frame in frames[:5]
+    ]
+    content.append({"type": "text", "text": prompt})
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content or ""
+    except APIStatusError as exc:
+        raise RuntimeError(_clean_api_error(exc)) from exc
 
 
 def _call_anthropic(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
