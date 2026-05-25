@@ -577,21 +577,64 @@ button:disabled {
 }
 
 .job-row {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) 54px;
-  gap: 12px;
+  display: flex;
   align-items: center;
-  width: 100%;
+  gap: 4px;
   padding: 12px;
   border: 1px solid var(--line);
+  border-radius: 7px;
   background: #fff;
   color: var(--text);
-  text-align: left;
 }
 
 .job-row.selected {
   border-color: var(--accent);
   background: #f0f7ff;
+}
+
+.job-row-select {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 54px;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.job-delete {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+.job-delete:hover:not(:disabled) {
+  opacity: 1;
+  background: #fee2e2;
+  color: var(--danger);
+  border-color: #fecaca;
+}
+
+.inline-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #aab7c8;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.inline-label input {
+  margin-bottom: 0;
 }
 
 .dot {

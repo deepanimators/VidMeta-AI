@@ -519,7 +519,7 @@ function App() {
 
         <section className="panel compact">
           <h2><HardDrive size={18} /> Runtime</h2>
-          <select value={settings.app_mode} onChange={(event) => updateSettings("app_mode", event.target.value)}>
+          <select aria-label="App mode" value={settings.app_mode} onChange={(event) => updateSettings("app_mode", event.target.value)}>
             <option value="local">Local web</option>
             <option value="desktop">VidMeta AI Desktop</option>
             <option value="hosted">Private hosted</option>
@@ -532,6 +532,7 @@ function App() {
         <section className="panel compact">
           <h2><Settings size={18} /> Provider</h2>
           <select
+            aria-label="AI provider"
             value={settings.provider_settings.provider}
             onChange={(event) => selectProvider(event.target.value)}
           >
@@ -542,6 +543,7 @@ function App() {
             <option value="gemini">Gemini</option>
           </select>
           <select
+            aria-label="Model"
             value={selectedModelValue(settings.provider_settings.provider, settings.provider_settings.model)}
             onChange={(event) => selectModel(event.target.value)}
           >
@@ -570,6 +572,7 @@ function App() {
         <section className="panel compact">
           <h2><Save size={18} /> Storage</h2>
           <select
+            aria-label="Storage backend"
             value={settings.storage_settings.backend}
             onChange={(event) => updateStorage("backend", event.target.value)}
           >
@@ -602,7 +605,7 @@ function App() {
               onChange={(e) => updateSettings("upload_retention_days", Number(e.target.value))}
             />
           </label>
-          <button className="secondary" onClick={saveSettings} disabled={busy}><Save size={16} /> Save settings</button>
+          <button type="button" className="secondary" onClick={saveSettings} disabled={busy}><Save size={16} /> Save settings</button>
         </section>
       </aside>
 
@@ -626,8 +629,8 @@ function App() {
               <p className="mode-note">VidMeta AI Desktop passes native file and folder paths to the local service.</p>
               <div className="path-row">
                 <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/Users/you/Videos/product-demo.mp4" />
-                <button className="icon-button" onClick={() => pickLocalSource("file")} title="Pick video file"><Video size={18} /></button>
-                <button className="icon-button" onClick={() => pickLocalSource("folder")} title="Pick video folder"><FolderOpen size={18} /></button>
+                <button type="button" className="icon-button" onClick={() => pickLocalSource("file")} title="Pick video file" aria-label="Pick video file"><Video size={18} /></button>
+                <button type="button" className="icon-button" onClick={() => pickLocalSource("folder")} title="Pick video folder" aria-label="Pick video folder"><FolderOpen size={18} /></button>
               </div>
               <JobConfiguration
                 settings={settings}
@@ -636,7 +639,7 @@ function App() {
                 onVideoChange={updateVideo}
                 onSelectedPlatformsChange={setSelectedPlatforms}
               />
-              <button className="primary" onClick={createPathJob} disabled={busy || !selectedPlatforms.length}><Play size={17} /> Analyze local path</button>
+              <button type="button" className="primary" onClick={createPathJob} disabled={busy || !selectedPlatforms.length}><Play size={17} /> Analyze local path</button>
             </section>
           ) : (
             <section className="panel main-card">
@@ -647,6 +650,8 @@ function App() {
                 type="file"
                 accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
                 multiple
+                aria-hidden="true"
+                tabIndex={-1}
                 onChange={(event) => handleBrowserFiles(event.target.files)}
               />
               <input
@@ -655,11 +660,13 @@ function App() {
                 type="file"
                 accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
                 multiple
+                aria-hidden="true"
+                tabIndex={-1}
                 onChange={(event) => handleBrowserFiles(event.target.files)}
               />
               <div className="upload-picker">
-                <button className="secondary action-button" onClick={() => browserFilePickerRef.current?.click()}><Video size={17} /> Select videos</button>
-                <button className="secondary action-button" onClick={() => browserFolderPickerRef.current?.click()}><FolderOpen size={17} /> Select folder</button>
+                <button type="button" className="secondary action-button" onClick={() => browserFilePickerRef.current?.click()}><Video size={17} /> Select videos</button>
+                <button type="button" className="secondary action-button" onClick={() => browserFolderPickerRef.current?.click()}><FolderOpen size={17} /> Select folder</button>
               </div>
               {uploadFiles.length > 0 && (
                 <p className="selected-files">{uploadFiles.length} selected: {uploadFiles.slice(0, 2).map((file) => file.name).join(", ")}{uploadFiles.length > 2 ? "..." : ""}</p>
@@ -672,7 +679,7 @@ function App() {
                 onSelectedPlatformsChange={setSelectedPlatforms}
               />
               {uploadProgress > 0 && <div className="progress"><span style={{ width: `${uploadProgress}%` }} /></div>}
-              <button className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length || !selectedPlatforms.length}><UploadCloud size={17} /> Upload and analyze</button>
+              <button type="button" className="primary" onClick={uploadAndRun} disabled={busy || !uploadFiles.length || !selectedPlatforms.length}><UploadCloud size={17} /> Upload and analyze</button>
             </section>
           )}
         </div>
@@ -682,7 +689,7 @@ function App() {
           <div className="jobs">
             {jobs.map((job) => (
               <div key={job.id} className={`job-row ${selectedJob?.id === job.id ? "selected" : ""}`}>
-                <button className="job-row-select" onClick={() => setSelectedJobId(job.id)}>
+                <button type="button" className="job-row-select" onClick={() => setSelectedJobId(job.id)} aria-label={`Select job ${job.source_path.split("/").pop()}`}>
                   <span className={`dot ${job.status}`} />
                   <span className="job-main">
                     <strong>{job.source_path.split("/").pop()}</strong>
@@ -691,8 +698,10 @@ function App() {
                   <span className="job-progress">{job.progress}%</span>
                 </button>
                 <button
+                  type="button"
                   className="job-delete"
                   title="Delete job"
+                  aria-label="Delete job"
                   disabled={job.status === "running"}
                   onClick={(e) => { e.stopPropagation(); void deleteJob(job.id); }}
                 >
@@ -874,7 +883,7 @@ function PlatformPicker({
             <button
               type="button"
               role="tab"
-              aria-selected={isActive}
+              aria-selected={isActive ? "true" : "false"}
               className={`platform-tab ${isActive ? "active" : ""}`}
               key={group.title}
               onClick={() => setActiveGroupIndex(index)}
