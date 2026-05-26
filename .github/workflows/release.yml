@@ -26,6 +26,7 @@ jobs:
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
       WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,9 +65,8 @@ jobs:
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-          echo "CODESIGN_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
-          echo "APPLE_SIGNING_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
-          echo "APPLE_CERTIFICATE_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
+          echo "CODESIGN_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
+          echo "APPLE_CERTIFICATE_IDENTITY=$APPLE_SIGNING_IDENTITY" >> $GITHUB_ENV
 
       # ── Windows signing certificate ───────────────────────────────────────
       - name: Import Windows signing certificate
