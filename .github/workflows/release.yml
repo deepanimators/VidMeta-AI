@@ -64,7 +64,8 @@ jobs:
           pip install pyinstaller
 
       - name: Build vidmeta-server sidecar
-        run: python -m PyInstaller --clean --noconfirm vidmeta-server.spec
+        run: python -m PyInstaller --noconfirm "$GITHUB_WORKSPACE/vidmeta-server.spec"
+        shell: bash
 
       - name: Copy sidecar binary to Tauri binaries (Unix)
         if: runner.os != 'Windows'
