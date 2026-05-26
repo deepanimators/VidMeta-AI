@@ -10,14 +10,14 @@ slowapi>=0.1.9
 
 # Video processing
 opencv-python-headless>=4.9.0
-Pillow>=10.4.0,<11.0.0
+Pillow>=12.1.1
 faster-whisper>=1.0.0
 
 # LLM providers
 openai>=1.30.0
 anthropic>=0.28.0
 google-generativeai>=0.7.0
-requests>=2.33.0
+requests>=2.32.0,<3.0.0
 
 # Retry / resilience
 tenacity>=8.2.0
@@ -31,12 +31,5 @@ boto3>=1.35.0
 # Security floors from audit
 filelock>=3.20.3
 
-# Frame enrichment — all optional, each degrades gracefully if missing
-# scenedetect: better scene-cut detection (uses opencv-python-headless already installed)
-# ultralytics: YOLO object detection per frame (pulls PyTorch ~700MB)
-# easyocr: OCR text extraction from frames
-# moondream: moondream2 frame captioning (~900MB model download on first use)
-scenedetect>=0.6.4
-ultralytics>=8.3.0
-easyocr>=1.7.0
-moondream>=1.1.0
+# Frame enrichment — install via requirements-optional.txt
+# These are optional; the service degrades gracefully if missing.
