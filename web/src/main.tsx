@@ -329,9 +329,9 @@ const defaultSettings: AppSettings = {
     whisper_model_size: "base",
     frame_interval: 5,
     max_frames: 20,
-    enable_object_detection: false,
-    enable_ocr: false,
-    enable_frame_captioning: false
+    enable_object_detection: true,
+    enable_ocr: true,
+    enable_frame_captioning: true
   },
   provider_settings: {
     provider: "ollama",
