@@ -168,7 +168,7 @@ def analyze_video(
     # Pass video_path so Gemini can use native video API instead of JPEG frames.
     analysis = call_llm(
         frames, analysis_prompt, provider_config,
-        max_tokens=16000,
+        max_tokens=20000,
         video_path=file_path, frame_timestamps=frame_timestamps,
     )
     _progress(
