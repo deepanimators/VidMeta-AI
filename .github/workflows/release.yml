@@ -66,6 +66,18 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           echo "CODESIGN_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
 
+      # ── Windows signing certificate ───────────────────────────────────────
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) { exit 0 }
+          $certPath = Join-Path $env:RUNNER_TEMP "windows-codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $securePassword = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
+          "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       # ── Python sidecar ────────────────────────────────────────────────────
       - name: Set up Python 3.12
         uses: actions/setup-python@v5.6.0
@@ -81,8 +93,8 @@ jobs:
           pip install pyinstaller
 
       - name: Build vidmeta-server sidecar
-        run: python -m PyInstaller --noconfirm "$GITHUB_WORKSPACE/vidmeta-server.spec"
         shell: bash
+        run: python -m PyInstaller --noconfirm "$GITHUB_WORKSPACE/vidmeta-server.spec"
 
       - name: Copy sidecar binary to Tauri binaries (Unix)
         if: runner.os != 'Windows'
@@ -139,16 +151,6 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: desktop
         run: npm ci
-
-        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
-        shell: pwsh
-        run: |
-          if (-not $env:WINDOWS_CERTIFICATE) { exit 0 }
-          $certPath = Join-Path $env:RUNNER_TEMP "windows-codesign.pfx"
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $securePassword = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $cert = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
-          "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build Tauri app
         working-directory: desktop
