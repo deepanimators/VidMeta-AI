@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build-desktop:
+    environment: release
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
