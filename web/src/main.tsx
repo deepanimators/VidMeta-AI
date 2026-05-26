@@ -700,7 +700,7 @@ function App() {
           </div>
         </div>
 
-        <section className="panel compact">
+        {/* <section className="panel compact">
           <h2><HardDrive size={18} /> Runtime</h2>
           <select aria-label="App mode" value={settings.app_mode} onChange={(event) => updateSettings("app_mode", event.target.value)}>
             <option value="local">Local web</option>
@@ -710,7 +710,7 @@ function App() {
           {settings.app_mode === "hosted" && (
             <p className="warning"><AlertTriangle size={15} /> Hosted mode has no auth yet. Use only on trusted private networks.</p>
           )}
-        </section>
+        </section> */}
 
         <section className="panel compact">
           <h2><Settings size={18} /> Provider</h2>
