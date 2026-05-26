@@ -78,6 +78,8 @@ def call_llm(
         return _call_gemini(frames, prompt, config.api_key, config.model, max_tokens, video_path)
     if provider == "nvidia":
         return _call_nvidia(frames, prompt, config.api_key, config.model, max_tokens)
+    if provider == "groq":
+        return _call_groq(frames, prompt, config.api_key, config.model, max_tokens)
     raise ValueError(f"Unsupported provider: {config.provider}")
 
 
@@ -204,6 +206,38 @@ def _call_gemini(
         parts, generation_config={"max_output_tokens": max_tokens}
     )
     return response.text or ""
+
+
+_GROQ_VISION_MODELS: frozenset[str] = frozenset({
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "llama-3.2-90b-vision-preview",
+    "llama-3.2-11b-vision-preview",
+    "llava-v1.5-7b-4096-preview",
+})
+
+
+def _call_groq(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+    """Call Groq API — OpenAI-compatible; vision models support up to 5 images."""
+    from openai import APIStatusError, OpenAI
+    client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+    if frames and model in _GROQ_VISION_MODELS:
+        content: list[dict] = [
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f}"}}
+            for f in frames[:5]
+        ]
+        content.append({"type": "text", "text": prompt})
+    else:
+        content = [{"type": "text", "text": prompt}]
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content or ""
+    except APIStatusError as exc:
+        raise RuntimeError(_clean_api_error(exc)) from exc
 
 
 def _call_gemini_native_video(prompt: str, model: str, max_tokens: int, video_path: str) -> str:

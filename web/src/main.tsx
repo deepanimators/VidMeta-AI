@@ -247,6 +247,35 @@ const MODEL_PRESETS: Record<string, { label: string; value: string; note?: strin
     { label: "Gemini 2.5 Flash", value: "gemini-2.5-flash", note: "fast metadata default" },
     { label: "Gemini 2.5 Pro", value: "gemini-2.5-pro" },
     { label: "Gemini 2.5 Flash-Lite", value: "gemini-2.5-flash-lite" }
+  ],
+  nvidia: [
+    { label: "Llama 4 Scout 17B Vision", value: "meta/llama-4-scout-17b-16e-instruct", note: "vision · fast default" },
+    { label: "Llama 4 Maverick 17B Vision", value: "meta/llama-4-maverick-17b-128e-instruct", note: "vision · balanced" },
+    { label: "Llama 3.2 90B Vision", value: "meta/llama-3.2-90b-vision-instruct", note: "vision · best quality" },
+    { label: "Llama 3.2 11B Vision", value: "meta/llama-3.2-11b-vision-instruct", note: "vision · lightweight" },
+    { label: "Qwen2-VL 72B", value: "qwen/qwen2-vl-72b-instruct", note: "vision · top accuracy" },
+    { label: "Qwen2-VL 7B", value: "qwen/qwen2-vl-7b-instruct", note: "vision · compact" },
+    { label: "Phi-4 Multimodal", value: "microsoft/phi-4-multimodal-instruct", note: "vision · Microsoft" },
+    { label: "Phi-3.5 Vision", value: "microsoft/phi-3.5-vision-instruct", note: "vision · efficient" },
+    { label: "Gemma 3 27B", value: "google/gemma-3-27b-instruct", note: "vision · Google" },
+    { label: "Gemma 3 12B", value: "google/gemma-3-12b-instruct", note: "vision · balanced" },
+    { label: "Gemma 3 4B", value: "google/gemma-3-4b-instruct", note: "vision · lightweight" },
+    { label: "Llama 3.3 70B", value: "meta/llama-3.3-70b-instruct", note: "text · high quality" },
+    { label: "Nemotron Nano 8B", value: "nvidia/llama-3.1-nemotron-nano-8b-v1", note: "text · ultra-fast" },
+    { label: "DeepSeek R1", value: "deepseek-ai/deepseek-r1", note: "text · reasoning" }
+  ],
+  groq: [
+    { label: "Llama 4 Scout 17B Vision", value: "meta-llama/llama-4-scout-17b-16e-instruct", note: "vision · fastest" },
+    { label: "Llama 4 Maverick 17B Vision", value: "meta-llama/llama-4-maverick-17b-128e-instruct", note: "vision · balanced" },
+    { label: "Llama 3.2 90B Vision", value: "llama-3.2-90b-vision-preview", note: "vision · high quality" },
+    { label: "Llama 3.2 11B Vision", value: "llama-3.2-11b-vision-preview", note: "vision · lightweight" },
+    { label: "LLaVA 1.5 7B", value: "llava-v1.5-7b-4096-preview", note: "vision · legacy" },
+    { label: "Llama 3.3 70B Versatile", value: "llama-3.3-70b-versatile", note: "text · default" },
+    { label: "Llama 3.1 8B Instant", value: "llama-3.1-8b-instant", note: "text · ultra-fast" },
+    { label: "DeepSeek R1 70B", value: "deepseek-r1-distill-llama-70b", note: "text · reasoning" },
+    { label: "Qwen QwQ 32B", value: "qwen-qwq-32b", note: "text · reasoning" },
+    { label: "Gemma 2 9B", value: "gemma2-9b-it", note: "text · efficient" },
+    { label: "Mixtral 8x7B 32K", value: "mixtral-8x7b-32768", note: "text · long context" }
   ]
 };
 
@@ -677,6 +706,8 @@ function App() {
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="gemini">Gemini</option>
+            <option value="nvidia">NVIDIA NIM</option>
+            <option value="groq">Groq</option>
           </select>
           <select
             aria-label="Model"
@@ -1252,6 +1283,8 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
           <option value="gemini">Gemini</option>
+          <option value="nvidia">NVIDIA NIM</option>
+          <option value="groq">Groq</option>
         </select>
         <select aria-label="Retry model" value={modelValue} onChange={(e) => { if (e.target.value === CUSTOM_MODEL_VALUE) { setModel(""); } else { setModel(e.target.value); } }}>
           {(MODEL_PRESETS[provider] ?? []).map((m) => (
