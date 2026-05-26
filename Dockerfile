@@ -15,8 +15,8 @@ COPY vidmeta ./vidmeta
 COPY api ./api
 COPY README.md ./
 
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --timeout 120 -r requirements.txt \
+    && pip install --no-cache-dir --timeout 120 .
 
 EXPOSE 8000
 
