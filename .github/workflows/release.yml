@@ -65,15 +65,18 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           echo "CODESIGN_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
+          echo "APPLE_SIGNING_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
+          echo "APPLE_CERTIFICATE_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
 
       # ── Windows signing certificate ───────────────────────────────────────
       - name: Import Windows signing certificate
-        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != '' && env.WINDOWS_CERTIFICATE != 'null'
         shell: pwsh
         run: |
-          if (-not $env:WINDOWS_CERTIFICATE) { exit 0 }
+          $cert64 = $env:WINDOWS_CERTIFICATE
+          if ([string]::IsNullOrWhiteSpace($cert64) -or $cert64.Length -lt 100) { exit 0 }
           $certPath = Join-Path $env:RUNNER_TEMP "windows-codesign.pfx"
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($cert64))
           $securePassword = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
           $cert = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
           "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
