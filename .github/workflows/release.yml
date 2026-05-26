@@ -74,6 +74,13 @@ jobs:
           cp dist/vidmeta-server desktop/src-tauri/binaries/vidmeta-server-${{ matrix.target }}
           chmod +x desktop/src-tauri/binaries/vidmeta-server-${{ matrix.target }}
 
+      - name: Sign sidecar binary (macOS)
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != '' && env.APPLE_CERTIFICATE_PASSWORD != ''
+        run: |
+          codesign --force --options runtime --timestamp \
+            --sign "$CODESIGN_IDENTITY" \
+            desktop/src-tauri/binaries/vidmeta-server-${{ matrix.target }}
+
       - name: Copy sidecar binary to Tauri binaries (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -130,6 +137,7 @@ jobs:
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          echo "CODESIGN_IDENTITY=Developer ID Application: Deepak Mohan (B3L935WNUC)" >> $GITHUB_ENV
 
       - name: Import Windows signing certificate
         if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
