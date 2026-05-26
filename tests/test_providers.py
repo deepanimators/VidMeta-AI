@@ -24,7 +24,7 @@ def test_openai_provider_uses_max_completion_tokens_for_openai_base(monkeypatch)
 
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
 
-    result = _call_openai_compat([], "prompt", "key", "gpt-5.5", "https://api.openai.com/v1", 1234)
+    result = _call_openai_compat([], "prompt", "key", "gpt-5.5", "https://api.openai.com/v1", 1234, [])
 
     assert result == "done"
     assert captured["max_completion_tokens"] == 1234
@@ -51,7 +51,7 @@ def test_openai_compatible_provider_keeps_max_tokens_for_non_openai_base(monkeyp
 
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
 
-    result = _call_openai_compat([], "prompt", "key", "openrouter/auto", "https://openrouter.ai/api/v1", 1234)
+    result = _call_openai_compat([], "prompt", "key", "openrouter/auto", "https://openrouter.ai/api/v1", 1234, [])
 
     assert result == "done"
     assert captured["max_tokens"] == 1234
@@ -83,7 +83,7 @@ def test_ollama_falls_back_to_generate_when_chat_endpoint_is_missing(monkeypatch
 
     monkeypatch.setitem(sys.modules, "requests", types.SimpleNamespace(post=fake_post))
 
-    result = _call_ollama(["frame"], "prompt", "http://localhost:11434/", "gemma3:4b", 321)
+    result = _call_ollama(["frame"], "prompt", "http://localhost:11434/", "gemma3:4b", 321, [])
 
     assert result == "generated"
     assert [request["url"] for request in requests_seen] == [
