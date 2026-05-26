@@ -9,6 +9,7 @@ on:
       tag:
         description: "Release tag (e.g. v1.0.0)"
         required: true
+        default: "v1.0.0"
 
 permissions:
   contents: write
@@ -44,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       # ── Python sidecar ────────────────────────────────────────────────────
       - name: Set up Python 3.12
@@ -164,6 +167,7 @@ jobs:
         if: runner.os == 'macOS'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           draft: true
           generate_release_notes: true
           files: |
@@ -174,6 +178,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           draft: true
           generate_release_notes: true
           files: |
