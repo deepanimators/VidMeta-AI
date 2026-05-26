@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-SPEC = ROOT / "vidmeta-server.spec"
 
 
 def main() -> None:
@@ -12,7 +11,7 @@ def main() -> None:
         sys.executable, "-m", "PyInstaller",
         "--clean",
         "--noconfirm",
-        str(SPEC),
+        "vidmeta-server.spec",
     ]
     print(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=ROOT)
