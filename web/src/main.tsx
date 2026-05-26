@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  Eye,
+  EyeOff,
   FolderOpen,
   HardDrive,
   History,
@@ -363,6 +365,10 @@ function App() {
   const [message, setMessage] = React.useState("");
   const [uploadProgress, setUploadProgress] = React.useState(0);
   const [liveData, setLiveData] = React.useState<Partial<LiveExtractionData> | null>(null);
+  const [providerKeys, setProviderKeys] = React.useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("vidmeta_provider_keys") ?? "{}"); } catch { return {}; }
+  });
+  const [showApiKey, setShowApiKey] = React.useState(false);
   const browserFilePickerRef = React.useRef<HTMLInputElement>(null);
   const browserFolderPickerRef = React.useRef<HTMLInputElement>(null);
 
@@ -378,6 +384,10 @@ function App() {
     return selectedJob;
   }, [result, selectedJob]);
   const selectedResult = result?.id === selectedJob?.id ? result : null;
+
+  React.useEffect(() => {
+    localStorage.setItem("vidmeta_provider_keys", JSON.stringify(providerKeys));
+  }, [providerKeys]);
 
   React.useEffect(() => {
     void refresh();
@@ -736,7 +746,12 @@ function App() {
             <input value={settings.provider_settings.ollama_url} onChange={(event) => updateProvider("ollama_url", event.target.value)} placeholder="Ollama URL" />
           ) : (
             <>
-              <input value={settings.provider_settings.api_key} onChange={(event) => updateProvider("api_key", event.target.value)} placeholder="API key" type="password" />
+              <div className="key-input-wrap">
+                <input value={settings.provider_settings.api_key} onChange={(event) => updateApiKey(event.target.value)} placeholder="API key" type={showApiKey ? "text" : "password"} />
+                <button type="button" className="key-toggle" onClick={() => setShowApiKey((v) => !v)} aria-label={showApiKey ? "Hide API key" : "Show API key"}>
+                  {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
               {["openrouter", "openai"].includes(settings.provider_settings.provider) && (
                 <input value={settings.provider_settings.api_base} onChange={(event) => updateProvider("api_base", event.target.value)} placeholder="API base URL (optional)" />
               )}
@@ -945,15 +960,25 @@ function App() {
   function updateProvider<K extends keyof ProviderSettings>(key: K, value: ProviderSettings[K]) {
     setSettings((current) => ({ ...current, provider_settings: { ...current.provider_settings, [key]: value } }));
   }
+  function updateApiKey(value: string) {
+    setProviderKeys((prev) => ({ ...prev, [settings.provider_settings.provider]: value }));
+    setSettings((current) => ({ ...current, provider_settings: { ...current.provider_settings, api_key: value } }));
+  }
   function selectProvider(provider: string) {
+    const currentProvider = settings.provider_settings.provider;
+    const currentKey = settings.provider_settings.api_key;
+    const merged = { ...providerKeys, [currentProvider]: currentKey };
+    setProviderKeys(merged);
     setSettings((current) => ({
       ...current,
       provider_settings: {
         ...current.provider_settings,
         provider,
+        api_key: merged[provider] ?? "",
         model: DEFAULT_MODEL_BY_PROVIDER[provider] ?? ""
       }
     }));
+    setShowApiKey(false);
   }
   function selectModel(value: string) {
     if (value === CUSTOM_MODEL_VALUE) {
@@ -1288,10 +1313,18 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
   const [apiKey, setApiKey] = React.useState(orig?.api_key ?? "");
   const [apiBase, setApiBase] = React.useState(orig?.api_base ?? "");
   const [ollamaUrl, setOllamaUrl] = React.useState(orig?.ollama_url ?? "http://localhost:11434");
+  const [showKey, setShowKey] = React.useState(false);
 
   function handleProviderChange(next: string) {
+    const saved: Record<string, string> = (() => {
+      try { return JSON.parse(localStorage.getItem("vidmeta_provider_keys") ?? "{}"); } catch { return {}; }
+    })();
+    saved[provider] = apiKey;
+    localStorage.setItem("vidmeta_provider_keys", JSON.stringify(saved));
     setProvider(next);
     setModel(DEFAULT_MODEL_BY_PROVIDER[next] ?? "");
+    setApiKey(saved[next] ?? "");
+    setShowKey(false);
   }
 
   const modelValue = selectedModelValue(provider, model);
@@ -1329,7 +1362,12 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
           <input value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)} placeholder="Ollama URL" />
         ) : (
           <>
-            <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key" type="password" />
+            <div className="key-input-wrap">
+              <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key" type={showKey ? "text" : "password"} />
+              <button type="button" className="key-toggle" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? "Hide API key" : "Show API key"}>
+                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
             {["openrouter", "openai"].includes(provider) && (
               <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="API base URL (optional)" />
             )}
