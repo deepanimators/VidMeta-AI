@@ -31,12 +31,12 @@ boto3>=1.35.0
 # Security floors from audit
 filelock>=3.20.3
 
-# Frame enrichment (optional — install individually to enable each feature)
-# pip install "scenedetect[opencv]>=0.6.4"  → better scene-cut detection
-# pip install "ultralytics>=8.3.0"          → YOLO object detection per frame
-# pip install "easyocr>=1.7.0"             → OCR text extraction from frames
-# pip install "moondream>=1.1.0"           → moondream2 frame captioning (~900MB)
-scenedetect[opencv]>=0.6.4
+# Frame enrichment — all optional, each degrades gracefully if missing
+# scenedetect: better scene-cut detection (uses opencv-python-headless already installed)
+# ultralytics: YOLO object detection per frame (pulls PyTorch ~700MB)
+# easyocr: OCR text extraction from frames
+# moondream: moondream2 frame captioning (~900MB model download on first use)
+scenedetect>=0.6.4
 ultralytics>=8.3.0
 easyocr>=1.7.0
 moondream>=1.1.0
