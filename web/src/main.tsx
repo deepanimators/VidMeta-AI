@@ -23,6 +23,7 @@ type BrandContext = {
   brand_niche: string;
   target_audience: string;
   tone: string;
+  custom_instructions: string;
 };
 
 type VideoSettings = {
@@ -315,7 +316,8 @@ const defaultSettings: AppSettings = {
     brand_name: "",
     brand_niche: "",
     target_audience: "",
-    tone: ""
+    tone: "",
+    custom_instructions: ""
   },
   video_settings: {
     use_whisper: true,
@@ -986,11 +988,18 @@ function JobConfiguration({
   return (
     <div className="job-config">
       <div className="form-grid">
-        <input value={settings.brand_context.brand_name} onChange={(event) => onBrandChange("brand_name", event.target.value)} placeholder="Brand" />
-        <input value={settings.brand_context.brand_niche} onChange={(event) => onBrandChange("brand_niche", event.target.value)} placeholder="Niche" />
-        <input value={settings.brand_context.target_audience} onChange={(event) => onBrandChange("target_audience", event.target.value)} placeholder="Audience" />
-        <input value={settings.brand_context.tone} onChange={(event) => onBrandChange("tone", event.target.value)} placeholder="Tone" />
+        <input value={settings.brand_context.brand_name} onChange={(event) => onBrandChange("brand_name", event.target.value)} placeholder="Brand name" />
+        <input value={settings.brand_context.brand_niche} onChange={(event) => onBrandChange("brand_niche", event.target.value)} placeholder="Niche / industry" />
+        <input value={settings.brand_context.target_audience} onChange={(event) => onBrandChange("target_audience", event.target.value)} placeholder="Target audience" />
+        <input value={settings.brand_context.tone} onChange={(event) => onBrandChange("tone", event.target.value)} placeholder="Tone (e.g. casual, professional, energetic)" />
       </div>
+      <textarea
+        className="custom-instructions"
+        value={settings.brand_context.custom_instructions}
+        onChange={(event) => onBrandChange("custom_instructions", event.target.value)}
+        placeholder="Custom instructions (optional) — e.g. always include emojis in TikTok captions, never use #ad, avoid jargon, prioritize CTA in first line"
+        rows={3}
+      />
       <div className="controls-row">
         <label>Frame interval <input type="number" min={1} max={120} value={settings.video_settings.frame_interval} onChange={(event) => onVideoChange("frame_interval", Number(event.target.value))} /></label>
         <label>Max frames <input type="number" min={1} max={60} value={settings.video_settings.max_frames} onChange={(event) => onVideoChange("max_frames", Number(event.target.value))} /></label>

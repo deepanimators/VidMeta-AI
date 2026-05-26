@@ -202,7 +202,26 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  margin-bottom: 10px;
+}
+
+.custom-instructions {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg, var(--surface));
+  color: var(--text);
+  line-height: 1.5;
   margin-bottom: 14px;
+}
+
+.custom-instructions::placeholder {
+  color: var(--muted);
 }
 
 .form-grid > * {

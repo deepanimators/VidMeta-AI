@@ -51,6 +51,7 @@ class BrandContext(BaseModel):
     brand_niche: str = ""
     target_audience: str = ""
     tone: str = ""
+    custom_instructions: str = ""
 
 
 class VideoSettings(BaseModel):

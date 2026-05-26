@@ -136,11 +136,13 @@ def analyze_video(
             **({"vision_warning": vision_warning} if vision_warning else {}),
         },
     )
+    custom_block = f"\nCustom Instructions: {brand.custom_instructions}" if getattr(brand, "custom_instructions", "") else ""
     analysis_prompt = ANALYSIS_PROMPT.format(
-        brand_name=brand.brand_name,
-        brand_niche=brand.brand_niche,
-        target_audience=brand.target_audience,
-        tone=brand.tone,
+        brand_name=brand.brand_name or "Not specified",
+        brand_niche=brand.brand_niche or "Not specified",
+        target_audience=brand.target_audience or "Not specified",
+        tone=brand.tone or "Not specified",
+        custom_instructions_block=custom_block,
         video_metadata=video_meta_str,
         orientation_hint=orientation_hint,
         transcript=transcript or "No transcript available",
@@ -170,10 +172,11 @@ def analyze_video(
     )
     metadata_prompt = METADATA_PROMPT.format(
         analysis=analysis,
-        brand_name=brand.brand_name,
-        brand_niche=brand.brand_niche,
-        target_audience=brand.target_audience,
-        tone=brand.tone,
+        brand_name=brand.brand_name or "Not specified",
+        brand_niche=brand.brand_niche or "Not specified",
+        target_audience=brand.target_audience or "Not specified",
+        tone=brand.tone or "Not specified",
+        custom_instructions_block=custom_block,
         platform_requirements=platform_requirements(selected_platforms),
         platform_json_template=platform_json_template(selected_platforms),
     )
@@ -191,10 +194,11 @@ def analyze_video(
         )
         repair_prompt = METADATA_REPAIR_PROMPT.format(
             analysis=analysis,
-            brand_name=brand.brand_name,
-            brand_niche=brand.brand_niche,
-            target_audience=brand.target_audience,
-            tone=brand.tone,
+            brand_name=brand.brand_name or "Not specified",
+            brand_niche=brand.brand_niche or "Not specified",
+            target_audience=brand.target_audience or "Not specified",
+            tone=brand.tone or "Not specified",
+            custom_instructions_block=custom_block,
             existing_metadata=json.dumps(metadata.model_dump(), ensure_ascii=False),
             platform_requirements=platform_requirements(missing_platforms),
             platform_json_template=platform_json_template(missing_platforms),
