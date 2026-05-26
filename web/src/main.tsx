@@ -31,6 +31,9 @@ type VideoSettings = {
   whisper_model_size: string;
   frame_interval: number;
   max_frames: number;
+  enable_object_detection: boolean;
+  enable_ocr: boolean;
+  enable_frame_captioning: boolean;
 };
 
 type ProviderSettings = {
@@ -323,7 +326,10 @@ const defaultSettings: AppSettings = {
     use_whisper: true,
     whisper_model_size: "base",
     frame_interval: 5,
-    max_frames: 20
+    max_frames: 20,
+    enable_object_detection: false,
+    enable_ocr: false,
+    enable_frame_captioning: false
   },
   provider_settings: {
     provider: "ollama",
@@ -1004,6 +1010,21 @@ function JobConfiguration({
         <label>Frame interval <input type="number" min={1} max={120} value={settings.video_settings.frame_interval} onChange={(event) => onVideoChange("frame_interval", Number(event.target.value))} /></label>
         <label>Max frames <input type="number" min={1} max={60} value={settings.video_settings.max_frames} onChange={(event) => onVideoChange("max_frames", Number(event.target.value))} /></label>
         <label>Whisper <input type="checkbox" checked={settings.video_settings.use_whisper} onChange={(event) => onVideoChange("use_whisper", event.target.checked)} /></label>
+      </div>
+      <div className="enrichment-row">
+        <span className="enrichment-label">Frame enrichment</span>
+        <label className="check" title="Detect objects/people in each frame using YOLOv8n — requires: pip install ultralytics">
+          <input type="checkbox" checked={settings.video_settings.enable_object_detection} onChange={(event) => onVideoChange("enable_object_detection", event.target.checked)} />
+          Object detection
+        </label>
+        <label className="check" title="Extract visible text overlays, captions, product names — requires: pip install easyocr">
+          <input type="checkbox" checked={settings.video_settings.enable_ocr} onChange={(event) => onVideoChange("enable_ocr", event.target.checked)} />
+          OCR text
+        </label>
+        <label className="check" title="Generate a text caption per frame using moondream2 (~900MB download on first use) — requires: pip install moondream">
+          <input type="checkbox" checked={settings.video_settings.enable_frame_captioning} onChange={(event) => onVideoChange("enable_frame_captioning", event.target.checked)} />
+          Frame captions
+        </label>
       </div>
       <PlatformPicker selected={selectedPlatforms} onChange={onSelectedPlatformsChange} />
     </div>

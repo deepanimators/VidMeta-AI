@@ -18,6 +18,9 @@ from vidmeta.ai.providers import ProviderConfig, call_llm, ollama_likely_text_on
 from vidmeta.ai.schemas import MetadataResult
 from vidmeta.settings import BrandContext, ProviderSettings, VideoSettings
 from vidmeta.video.frames import extract_frames, extract_thumbnails, get_video_metadata
+from vidmeta.video.detection import detect_objects
+from vidmeta.video.ocr import extract_text
+from vidmeta.video.captioning import caption_frame
 from vidmeta.video.transcription import transcribe_audio
 
 
@@ -65,7 +68,9 @@ def analyze_video(
 
     # --- Frame extraction ---
     _progress(progress, "frames", 10, "Extracting representative video frames")
-    frames = extract_frames(file_path, video.frame_interval, video.max_frames)
+    frames_with_ts = extract_frames(file_path, video.frame_interval, video.max_frames)
+    frames = [b64 for _, b64 in frames_with_ts]
+    frame_timestamps = [ts for ts, _ in frames_with_ts]
     thumbnails = extract_thumbnails(file_path, video.frame_interval, video.max_frames)
     _progress(
         progress,
@@ -81,6 +86,18 @@ def analyze_video(
             "video_metadata": video_meta_dict,
         },
     )
+
+    # --- Frame enrichment (object detection / OCR / captioning) ---
+    frame_annotations_block = ""
+    any_enrichment = video.enable_object_detection or video.enable_ocr or video.enable_frame_captioning
+    if any_enrichment and frames:
+        _progress(progress, "frames", 38, "Running frame enrichment (detection / OCR / captioning)")
+        frame_annotations_block = _build_frame_annotations(frames_with_ts, video)
+        _progress(
+            progress, "frames", 45,
+            f"Frame enrichment complete — {len(frames_with_ts)} frames annotated",
+            {"frame_annotations": frame_annotations_block[:500]},
+        )
 
     # --- Audio transcription ---
     transcript = ""
@@ -144,11 +161,15 @@ def analyze_video(
         tone=brand.tone or "Not specified",
         custom_instructions_block=custom_block,
         video_metadata=video_meta_str,
+        frame_annotations_block=frame_annotations_block,
         orientation_hint=orientation_hint,
         transcript=transcript or "No transcript available",
     )
     # Pass video_path so Gemini can use native video API instead of JPEG frames.
-    analysis = call_llm(frames, analysis_prompt, provider_config, video_path=file_path)
+    analysis = call_llm(
+        frames, analysis_prompt, provider_config,
+        video_path=file_path, frame_timestamps=frame_timestamps,
+    )
     _progress(
         progress,
         "analysis",
@@ -228,6 +249,42 @@ def analyze_video(
         "metadata": metadata.model_dump(),
         "raw_output": raw_metadata,
     }
+
+
+def _build_frame_annotations(
+    frames_with_ts: list[tuple[float, str]],
+    settings: VideoSettings,
+) -> str:
+    """Run enabled enrichment on each frame; return a prompt-ready annotation block."""
+    lines: list[str] = []
+    for i, (ts, b64) in enumerate(frames_with_ts):
+        mins, secs = divmod(int(ts), 60)
+        label = f"{mins}:{secs:02d}"
+        parts: list[str] = []
+
+        if settings.enable_object_detection:
+            objs = detect_objects(b64)
+            if objs:
+                parts.append(f"Objects: [{', '.join(objs)}]")
+
+        if settings.enable_ocr:
+            texts = extract_text(b64)
+            if texts:
+                parts.append(f"On-screen text: [{' | '.join(texts[:6])}]")
+
+        if settings.enable_frame_captioning:
+            caption = caption_frame(b64)
+            if caption:
+                parts.append(f"Caption: {caption}")
+
+        if parts:
+            lines.append(f"  Frame {i + 1} ({label}): {' | '.join(parts)}")
+
+    if not lines:
+        return ""
+
+    header = "\n--- PRE-EXTRACTED FRAME ANNOTATIONS ---\n[Automatically detected — use as additional evidence alongside the visual frames]\n"
+    return header + "\n".join(lines) + "\n"
 
 
 def _progress(

@@ -44,7 +44,7 @@ Content Tone: {tone}{custom_instructions_block}
 
 --- VIDEO TECHNICAL DATA ---
 {video_metadata}
-
+{frame_annotations_block}
 --- AUDIO TRANSCRIPT ---
 {transcript}
 

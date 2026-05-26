@@ -18,10 +18,17 @@ class ProviderConfig:
 
 
 # Keywords that identify vision-capable Ollama models.
-# Models whose names do NOT contain any of these are likely text-only.
 _OLLAMA_VISION_KEYWORDS: frozenset[str] = frozenset({
     "llava", "bakllava", "moondream", "vision", "minicpm",
     "qwen2-vl", "pixtral", "internvl", "cogvlm", "gemma3",
+})
+
+_GROQ_VISION_MODELS: frozenset[str] = frozenset({
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "llama-3.2-90b-vision-preview",
+    "llama-3.2-11b-vision-preview",
+    "llava-v1.5-7b-4096-preview",
 })
 
 
@@ -42,6 +49,17 @@ def _is_retryable(exc: BaseException) -> bool:
     return type(exc).__name__ in retryable
 
 
+def _fmt_ts(ts: float) -> str:
+    mins, secs = divmod(int(ts), 60)
+    return f"{mins}:{secs:02d}"
+
+
+def _ts_label(index: int, timestamps: list[float]) -> str:
+    if timestamps and index < len(timestamps):
+        return f"[Frame {index + 1} at {_fmt_ts(timestamps[index])}]"
+    return f"[Frame {index + 1}]"
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
@@ -54,6 +72,7 @@ def call_llm(
     config: ProviderConfig,
     max_tokens: int = 2200,
     video_path: str = "",
+    frame_timestamps: list[float] | None = None,
 ) -> str:
     """Call the configured LLM with optional visual context.
 
@@ -63,23 +82,26 @@ def call_llm(
         config: Provider / model configuration.
         max_tokens: Maximum response tokens.
         video_path: Local video file for Gemini native video analysis (optional).
+        frame_timestamps: Timestamps in seconds for each frame — interleaved as
+            text labels so the LLM can reference temporal position.
     """
+    ts = frame_timestamps or []
     provider = config.provider.lower()
     if provider == "ollama":
-        return _call_ollama(frames, prompt, config.ollama_url, config.model, max_tokens)
+        return _call_ollama(frames, prompt, config.ollama_url, config.model, max_tokens, ts)
     if provider in {"openrouter", "openai"}:
         base = config.api_base or (
             "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
         )
-        return _call_openai_compat(frames, prompt, config.api_key, config.model, base, max_tokens)
+        return _call_openai_compat(frames, prompt, config.api_key, config.model, base, max_tokens, ts)
     if provider == "anthropic":
-        return _call_anthropic(frames, prompt, config.api_key, config.model, max_tokens)
+        return _call_anthropic(frames, prompt, config.api_key, config.model, max_tokens, ts)
     if provider == "gemini":
-        return _call_gemini(frames, prompt, config.api_key, config.model, max_tokens, video_path)
+        return _call_gemini(frames, prompt, config.api_key, config.model, max_tokens, video_path, ts)
     if provider == "nvidia":
-        return _call_nvidia(frames, prompt, config.api_key, config.model, max_tokens)
+        return _call_nvidia(frames, prompt, config.api_key, config.model, max_tokens, ts)
     if provider == "groq":
-        return _call_groq(frames, prompt, config.api_key, config.model, max_tokens)
+        return _call_groq(frames, prompt, config.api_key, config.model, max_tokens, ts)
     raise ValueError(f"Unsupported provider: {config.provider}")
 
 
@@ -96,10 +118,22 @@ def _clean_api_error(exc: BaseException) -> str:
     return getattr(exc, "message", None) or str(exc)
 
 
-def _call_ollama(frames: list[str], prompt: str, url: str, model: str, max_tokens: int) -> str:
+def _call_ollama(
+    frames: list[str], prompt: str, url: str, model: str, max_tokens: int,
+    timestamps: list[float],
+) -> str:
     import requests
     base_url = url.rstrip("/")
-    messages = [{"role": "user", "content": prompt, "images": frames}]
+    # Ollama takes images as a separate array; prepend timestamp index as text note
+    ts_note = ""
+    if timestamps and frames:
+        labels = ", ".join(
+            f"Frame {i + 1} at {_fmt_ts(timestamps[i])}"
+            for i in range(min(len(frames), len(timestamps)))
+        )
+        ts_note = f"[Frame timestamps: {labels}]\n\n"
+    content = ts_note + prompt
+    messages = [{"role": "user", "content": content, "images": frames}]
     response = requests.post(
         f"{base_url}/api/chat",
         json={"model": model, "messages": messages, "stream": False, "options": {"num_predict": max_tokens}},
@@ -108,7 +142,7 @@ def _call_ollama(frames: list[str], prompt: str, url: str, model: str, max_token
     if response.status_code == 404:
         response = requests.post(
             f"{base_url}/api/generate",
-            json={"model": model, "prompt": prompt, "images": frames, "stream": False, "options": {"num_predict": max_tokens}},
+            json={"model": model, "prompt": content, "images": frames, "stream": False, "options": {"num_predict": max_tokens}},
             timeout=180,
         )
         response.raise_for_status()
@@ -117,15 +151,30 @@ def _call_ollama(frames: list[str], prompt: str, url: str, model: str, max_token
     return response.json().get("message", {}).get("content", "")
 
 
+def _build_interleaved_content(
+    frames: list[str],
+    timestamps: list[float],
+    image_type: str,  # "openai" | "anthropic"
+    max_frames: int = 20,
+) -> list[dict]:
+    """Build a content array with timestamp labels interleaved before each image."""
+    content: list[dict] = []
+    for i, frame in enumerate(frames[:max_frames]):
+        content.append({"type": "text", "text": _ts_label(i, timestamps)})
+        if image_type == "openai":
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}", "detail": "high"}})
+        else:  # anthropic
+            content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": frame}})
+    return content
+
+
 def _call_openai_compat(
-    frames: list[str], prompt: str, api_key: str, model: str, base_url: str, max_tokens: int
+    frames: list[str], prompt: str, api_key: str, model: str, base_url: str,
+    max_tokens: int, timestamps: list[float],
 ) -> str:
     from openai import APIStatusError, OpenAI
     client = OpenAI(api_key=api_key, base_url=base_url)
-    content: list[dict] = [
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}", "detail": "high"}}
-        for frame in frames[:20]
-    ]
+    content = _build_interleaved_content(frames, timestamps, "openai")
     content.append({"type": "text", "text": prompt})
     token_param = (
         {"max_completion_tokens": max_tokens}
@@ -147,15 +196,17 @@ def _is_openai_base_url(base_url: str) -> bool:
     return base_url.rstrip("/").lower() == "https://api.openai.com/v1"
 
 
-def _call_nvidia(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+def _call_nvidia(
+    frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int,
+    timestamps: list[float],
+) -> str:
     """Call NVIDIA NIM API — OpenAI-compatible endpoint with 5-image limit."""
     from openai import APIStatusError, OpenAI
     client = OpenAI(api_key=api_key, base_url="https://integrate.api.nvidia.com/v1")
-    # NIM default max is 5 images per request.
-    content: list[dict] = [
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}"}}
-        for frame in frames[:5]
-    ]
+    content: list[dict] = []
+    for i, frame in enumerate(frames[:5]):
+        content.append({"type": "text", "text": _ts_label(i, timestamps)})
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}"}})
     content.append({"type": "text", "text": prompt})
     try:
         response = client.chat.completions.create(
@@ -168,13 +219,13 @@ def _call_nvidia(frames: list[str], prompt: str, api_key: str, model: str, max_t
         raise RuntimeError(_clean_api_error(exc)) from exc
 
 
-def _call_anthropic(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+def _call_anthropic(
+    frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int,
+    timestamps: list[float],
+) -> str:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
-    content: list[dict] = [
-        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": frame}}
-        for frame in frames[:20]
-    ]
+    content = _build_interleaved_content(frames, timestamps, "anthropic")
     content.append({"type": "text", "text": prompt})
     try:
         response = client.messages.create(
@@ -187,7 +238,8 @@ def _call_anthropic(frames: list[str], prompt: str, api_key: str, model: str, ma
 
 
 def _call_gemini(
-    frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int, video_path: str = ""
+    frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int,
+    video_path: str = "", timestamps: list[float] | None = None,
 ) -> str:
     import google.generativeai as genai
     from PIL import Image
@@ -200,7 +252,11 @@ def _call_gemini(
         except Exception:
             pass  # Fallback to frame-based analysis
 
-    parts: list = [Image.open(io.BytesIO(base64.b64decode(frame))) for frame in frames[:20]]
+    ts = timestamps or []
+    parts: list = []
+    for i, frame in enumerate(frames[:20]):
+        parts.append(_ts_label(i, ts))
+        parts.append(Image.open(io.BytesIO(base64.b64decode(frame))))
     parts.append(prompt)
     response = genai.GenerativeModel(model).generate_content(
         parts, generation_config={"max_output_tokens": max_tokens}
@@ -208,24 +264,18 @@ def _call_gemini(
     return response.text or ""
 
 
-_GROQ_VISION_MODELS: frozenset[str] = frozenset({
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "llama-3.2-90b-vision-preview",
-    "llama-3.2-11b-vision-preview",
-    "llava-v1.5-7b-4096-preview",
-})
-
-
-def _call_groq(frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+def _call_groq(
+    frames: list[str], prompt: str, api_key: str, model: str, max_tokens: int,
+    timestamps: list[float],
+) -> str:
     """Call Groq API — OpenAI-compatible; vision models support up to 5 images."""
     from openai import APIStatusError, OpenAI
     client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
     if frames and model in _GROQ_VISION_MODELS:
-        content: list[dict] = [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f}"}}
-            for f in frames[:5]
-        ]
+        content: list[dict] = []
+        for i, frame in enumerate(frames[:5]):
+            content.append({"type": "text", "text": _ts_label(i, timestamps)})
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}"}})
         content.append({"type": "text", "text": prompt})
     else:
         content = [{"type": "text", "text": prompt}]
@@ -246,7 +296,6 @@ def _call_gemini_native_video(prompt: str, model: str, max_tokens: int, video_pa
     import google.generativeai as genai
 
     video_file = genai.upload_file(path=video_path)
-    # Poll until Gemini finishes processing (up to ~120 s).
     for _ in range(60):
         video_file = genai.get_file(video_file.name)
         if video_file.state.name == "ACTIVE":

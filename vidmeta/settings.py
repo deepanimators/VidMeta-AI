@@ -59,6 +59,9 @@ class VideoSettings(BaseModel):
     whisper_model_size: str = "base"
     frame_interval: int = Field(default=5, ge=1, le=120)
     max_frames: int = Field(default=20, ge=1, le=60)
+    enable_object_detection: bool = False
+    enable_ocr: bool = False
+    enable_frame_captioning: bool = False
 
 
 class ProviderSettings(BaseModel):
