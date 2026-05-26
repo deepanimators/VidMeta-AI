@@ -166,10 +166,9 @@ def analyze_video(
         transcript=transcript or "No transcript available",
     )
     # Pass video_path so Gemini can use native video API instead of JPEG frames.
-    # 4096 tokens: structured analysis output can exceed the 2200 default on verbose models.
     analysis = call_llm(
         frames, analysis_prompt, provider_config,
-        max_tokens=4096,
+        max_tokens=16000,
         video_path=file_path, frame_timestamps=frame_timestamps,
     )
     _progress(
