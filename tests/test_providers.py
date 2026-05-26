@@ -22,7 +22,9 @@ def test_openai_provider_uses_max_completion_tokens_for_openai_base(monkeypatch)
             captured["client"] = kwargs
             self.chat = types.SimpleNamespace(completions=FakeCompletions())
 
-    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(
+        OpenAI=FakeOpenAI, APIStatusError=Exception
+    ))
 
     result = _call_openai_compat([], "prompt", "key", "gpt-5.5", "https://api.openai.com/v1", 1234, [])
 
@@ -49,7 +51,9 @@ def test_openai_compatible_provider_keeps_max_tokens_for_non_openai_base(monkeyp
             captured["client"] = kwargs
             self.chat = types.SimpleNamespace(completions=FakeCompletions())
 
-    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(
+        OpenAI=FakeOpenAI, APIStatusError=Exception
+    ))
 
     result = _call_openai_compat([], "prompt", "key", "openrouter/auto", "https://openrouter.ai/api/v1", 1234, [])
 
