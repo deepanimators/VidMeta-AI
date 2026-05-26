@@ -6,13 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "vidmeta"
 version = "2.0.0"
 description = "VidMeta AI — Analyze local videos and generate platform-ready metadata"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.9",
     "opencv-python-headless>=4.9.0",
-    "Pillow>=10.4.0,<11.0.0",
+    "Pillow>=12.0.0,<12.1.0",
     "faster-whisper>=1.0.0",
     "openai>=1.30.0",
     "anthropic>=0.28.0",

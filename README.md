@@ -49,7 +49,7 @@ The old Streamlit app is retained as a migration reference under `legacy/`.
 
 | Tool | Required | Purpose |
 |---|---|---|
-| Python 3.10+ | Yes | FastAPI service |
+| Python 3.12+ | Yes | FastAPI service |
 | ffmpeg | Yes for audio | Audio extraction and transcription |
 | Node.js 20+ | Yes for UI | React/Vite dashboard |
 | Rust + Tauri prerequisites | Desktop only | Native desktop shell |
@@ -108,7 +108,27 @@ npm run build:linux
 docker compose up --build
 ```
 
-The API is exposed on `http://localhost:8000`. Mount videos into `./videos` and use paths like `/videos/example.mp4` for local-path jobs inside the container.
+This starts the backend in Docker and makes it available on your local machine at `http://localhost:8000`.
+
+To confirm Python is available inside the container, run:
+
+```bash
+docker compose exec vidmeta python --version
+```
+
+If you want the container to keep running in the background, use:
+
+```bash
+docker compose up --build -d
+```
+
+To run the platform against local video files, place them in `./videos` and submit paths like `/videos/example.mp4` inside the app. The compose file already mounts `./videos` read-only into the container.
+
+If you want to stop it later:
+
+```bash
+docker compose down
+```
 
 ## API Endpoints
 

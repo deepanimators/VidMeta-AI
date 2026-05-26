@@ -23,7 +23,7 @@ Runtime dependencies are now the FastAPI service stack, video processing librari
 pip-audit -r requirements.txt
 ```
 
-CI runs this audit on Python 3.11.
+CI runs this audit on Python 3.12.
 
 ## Notes
 

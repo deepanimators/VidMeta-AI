@@ -48,6 +48,26 @@ docker compose up --build
 
 API: `http://localhost:8000`.
 
+To confirm the backend container has Python installed:
+
+```bash
+docker compose exec vidmeta python --version
+```
+
+For a background run:
+
+```bash
+docker compose up --build -d
+```
+
+For local video jobs, put files in `./videos` and use paths like `/videos/example.mp4` from the app. The compose file mounts that folder into the container as a read-only volume.
+
+To stop the stack:
+
+```bash
+docker compose down
+```
+
 ## Hosted Warning
 
 Hosted mode currently has no auth. Use only for private/self-hosted deployments until auth, rate limiting, upload scanning, and secret isolation are added.

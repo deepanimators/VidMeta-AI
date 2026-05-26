@@ -170,7 +170,7 @@ VidMeta-AI: Aggressive Multi-Phase Market, Product & Architecture Audit
                                                                                                                   
   2. Friction Points                                                                                                
                                                                                                                   
-  Onboarding is developer-only. Setup requires: Python 3.10+, pip, FFmpeg (system-level), Node.js 20+, Rust + Cargo 
+  Onboarding is developer-only. Setup requires: Python 3.12+, pip, FFmpeg (system-level), Node.js 20+, Rust + Cargo
   (for desktop). This is a 45-minute setup for a developer and an impossible barrier for the actual target user   
   (content creator / agency). The README is competent but there's no installer, no one-click deploy, no hosted demo.
                                                                                                                   
