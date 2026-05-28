@@ -689,6 +689,16 @@ function App() {
     }
   }
 
+  async function stopJob(jobId: string) {
+    try {
+      await api(`/api/jobs/${jobId}/stop`, { method: "POST" });
+      setMessage("Stop requested");
+      await refresh();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Stop failed");
+    }
+  }
+
   async function deleteJob(jobId: string) {
     try {
       await api(`/api/jobs/${jobId}`, { method: "DELETE" });
@@ -944,6 +954,17 @@ function App() {
                     <RotateCcw size={13} />
                   </button>
                 )}
+                {job.status === "running" && (
+                  <button
+                    type="button"
+                    className="job-stop"
+                    title="Stop job"
+                    aria-label="Stop job"
+                    onClick={(e) => { e.stopPropagation(); void stopJob(job.id); }}
+                  >
+                    <XIcon size={13} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="job-delete"
@@ -978,6 +999,9 @@ function App() {
                 {["json", "csv", "txt"].map((format) => (
                   <a key={format} href={`${API_BASE}/api/jobs/${selectedJob.id}/exports/${format}`}><Download size={15} /> {format.toUpperCase()}</a>
                 ))}
+                {selectedJob.status === "running" && (
+                  <button type="button" className="job-stop secondary" onClick={() => void stopJob(selectedJob.id)}>Stop</button>
+                )}
               </div>
             </div>
             {selectedJob.status === "failed" && <p className="warning">{selectedJob.error_message}</p>}
@@ -1356,6 +1380,9 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
           <div className="live-section-head">
             <History size={13} />
             <strong>Transcript</strong>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="mini-button" onClick={() => navigator.clipboard.writeText(transcriptText)}>Copy</button>
+            </div>
           </div>
           <div className="live-text">{transcriptText}</div>
         </div>
@@ -1365,6 +1392,9 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
           <div className="live-section-head">
             <CheckCircle2 size={13} />
             <strong>Visual Analysis</strong>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="mini-button" onClick={() => navigator.clipboard.writeText(analysisPreview)}>Copy</button>
+            </div>
           </div>
           <div className="live-text">{analysisPreview}</div>
         </div>
@@ -1505,6 +1535,10 @@ function MetadataView({ metadata, analysis, transcript }: { metadata: Record<str
       </div>}
       <details>
         <summary>Analysis and transcript</summary>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <button className="mini-button" onClick={() => navigator.clipboard.writeText(analysis)}>Copy Analysis</button>
+          <button className="mini-button" onClick={() => navigator.clipboard.writeText(transcript)}>Copy Transcript</button>
+        </div>
         <pre>{analysis}</pre>
         <pre>{transcript}</pre>
       </details>

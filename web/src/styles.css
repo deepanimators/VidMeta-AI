@@ -739,6 +739,23 @@ progress.progress-bar.large {
   opacity: 0.6;
 }
 
+.job-stop {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.job-stop:hover {
+  opacity: 1;
+  background: #fff0f0;
+  color: var(--danger);
+  border-color: #fecaca;
+}
+
 .job-retry:hover {
   opacity: 1;
   background: #eff6ff;

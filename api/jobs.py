@@ -46,6 +46,7 @@ class JobRunner:
         self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="vidmeta-job")
         self._lock = threading.Lock()
         self._futures: dict[str, object] = {}
+        self._cancellations: set[str] = set()
 
     def create_from_path(self, payload: dict) -> dict:
         source_path = Path(payload["path"]).expanduser()
@@ -159,6 +160,29 @@ class JobRunner:
             # Remove completed future from dict to prevent unbounded memory growth.
             future.add_done_callback(lambda _f: self._remove_future(job_id))
 
+    def stop(self, job_id: str) -> dict[str, bool]:
+        """Request cancellation of a running job. Best-effort; marks job failed/stopped."""
+        with self._lock:
+            job = self.db.get_job(job_id)
+            if not job:
+                raise FileNotFoundError(f"Job not found: {job_id}")
+            status = job.get("status")
+            if status in {"completed", "failed"}:
+                return {"stopped": False}
+            # mark cancellation request
+            self._cancellations.add(job_id)
+            # attempt to cancel future if present
+            fut = self._futures.get(job_id)
+            try:
+                if fut and hasattr(fut, "cancel"):
+                    fut.cancel()
+            except Exception:
+                pass
+            # update DB to reflect requested stop
+            self.db.update_job(job_id, status="failed", stage="cancelled", error_message="Job cancelled by user", completed_at="CURRENT_TIMESTAMP")
+            self.db.add_job_event(job_id, "cancelled", int(job.get("progress") or 0), "Job cancelled by user")
+            return {"stopped": True}
+
     def _remove_future(self, job_id: str) -> None:
         with self._lock:
             self._futures.pop(job_id, None)
@@ -170,6 +194,9 @@ class JobRunner:
         processing_temp: str | None = None
         try:
             self._record_progress(job_id, "starting", 1, "Preparing job settings and source")
+            # honour cancellation requests before heavy work
+            if job_id in self._cancellations:
+                raise RuntimeError("Job cancelled by user")
             settings = self.db.get_settings()
             request = self._normalize_request(job.get("request", {}), settings)
             brand = request.get("brand_context") or settings.brand_context.model_dump()
@@ -194,6 +221,7 @@ class JobRunner:
             provider_model = ProviderSettings.model_validate(provider)
             if Path(job["source_path"]).is_dir():
                 result = self._run_batch(
+                    job_id,
                     job["source_path"],
                     brand_model,
                     video_model,
@@ -227,14 +255,26 @@ class JobRunner:
             self.db.add_job_event(job_id, "completed", 100, "Job completed successfully")
         except Exception as exc:
             current = self.db.get_job(job_id) or job
-            self.db.update_job(
-                job_id,
-                status="failed",
-                stage="failed",
-                error_message=str(exc),
-                completed_at="CURRENT_TIMESTAMP",
-            )
-            self.db.add_job_event(job_id, "failed", int(current.get("progress") or 0), str(exc))
+            msg = str(exc)
+            if isinstance(exc, RuntimeError) and "cancelled" in msg.lower():
+                # cancellation is explicit
+                self.db.update_job(
+                    job_id,
+                    status="failed",
+                    stage="cancelled",
+                    error_message="Job cancelled by user",
+                    completed_at="CURRENT_TIMESTAMP",
+                )
+                self.db.add_job_event(job_id, "cancelled", int(current.get("progress") or 0), "Job cancelled by user")
+            else:
+                self.db.update_job(
+                    job_id,
+                    status="failed",
+                    stage="failed",
+                    error_message=msg,
+                    completed_at="CURRENT_TIMESTAMP",
+                )
+                self.db.add_job_event(job_id, "failed", int(current.get("progress") or 0), msg)
         finally:
             if processing_temp:
                 cleanup_processing_file(processing_temp)
@@ -252,6 +292,7 @@ class JobRunner:
 
     def _run_batch(
         self,
+        job_id: str,
         folder: str,
         brand: BrandContext,
         video: VideoSettings,
@@ -272,6 +313,9 @@ class JobRunner:
         )
         batch_start = time.monotonic()
         for index, path in enumerate(files, start=1):
+            # check cancellation
+            if job_id in self._cancellations:
+                raise RuntimeError("Job cancelled by user")
             base_progress = int(((index - 1) / total) * 95)
             elapsed = time.monotonic() - batch_start
             avg_per_video = elapsed / index if index > 1 else 0

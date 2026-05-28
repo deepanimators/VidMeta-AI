@@ -170,6 +170,21 @@ async def retry_job(job_id: str, payload: RetryJobRequest, request: Request) -> 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/jobs/{job_id}/stop")
+@limiter.limit("30/minute")
+async def stop_job(job_id: str) -> dict:
+    """Request cancellation of a running job. Returns {stopped: bool}.
+
+    This signals the runner to stop processing; best-effort only.
+    """
+    try:
+        return runner.stop(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.delete("/api/jobs/{job_id}")
 async def delete_job(job_id: str) -> dict:
     """Delete a job and all associated data (transcript, metadata, events)."""

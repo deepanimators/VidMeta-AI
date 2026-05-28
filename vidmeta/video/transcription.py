@@ -54,7 +54,7 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
             if not transcript_segments:
                 return "[Silent]"
 
-            speaker_turns = _diarize_audio(audio_path)
+                speaker_turns = _diarize_audio(audio_path, transcript_segments)
             if speaker_turns:
                 return _format_transcript_with_speakers(transcript_segments, speaker_turns)
             return _format_transcript_with_timestamps(transcript_segments)
@@ -72,16 +72,27 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
             os.remove(audio_path)
 
 
-def _diarize_audio(audio_path: str) -> list[tuple[float, float, str]]:
+def _diarize_audio(audio_path: str, segments: list[TranscriptSegment] | None = None) -> list[tuple[float, float, str]]:
+    """Attempt diarization. Prefer pyannote Pipeline (HuggingFace) when available,
+    otherwise fall back to a lightweight offline clustering-based diarizer.
+
+    Returns a list of (start, end, speaker_label) tuples.
+    """
     pipeline = _get_diarization_pipeline()
-    if not pipeline:
-        return []
+    if pipeline:
+        try:
+            diarization = pipeline(audio_path)
+            turns: list[tuple[float, float, str]] = []
+            for turn, _, speaker in diarization.itertracks(yield_label=True):
+                turns.append((float(turn.start), float(turn.end), str(speaker)))
+            return turns
+        except Exception:
+            # fall through to offline attempt
+            pass
+
+    # Offline fallback: use Resemblyzer embeddings + clustering around transcript segments.
     try:
-        diarization = pipeline(audio_path)
-        turns: list[tuple[float, float, str]] = []
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            turns.append((float(turn.start), float(turn.end), str(speaker)))
-        return turns
+        return _diarize_offline(audio_path, segments)
     except Exception:
         return []
 
@@ -106,6 +117,85 @@ def _get_diarization_pipeline() -> object | None:
             except Exception:
                 _diarization_pipeline = False
         return _diarization_pipeline or None
+
+
+    def _diarize_offline(audio_path: str, segments: list[TranscriptSegment] | None = None) -> list[tuple[float, float, str]]:
+        """Offline diarization using Resemblyzer + KMeans clustering of segment embeddings.
+
+        This is a lightweight best-effort approach that works without Hugging Face tokens.
+        Requires optional packages: `resemblyzer`, `librosa`, `scikit-learn`, `numpy`.
+        """
+        if not segments:
+            return []
+        try:
+            import numpy as _np
+            import librosa as _librosa
+            from resemblyzer import VoiceEncoder as _VoiceEncoder
+            from sklearn.cluster import KMeans as _KMeans
+            from sklearn.metrics import silhouette_score as _silhouette_score
+        except Exception:
+            return []
+
+        # load audio at 16k
+        y, sr = _librosa.load(audio_path, sr=16000, mono=True)
+        encoder = _VoiceEncoder()
+        embeddings: list[_np.ndarray] = []
+        seg_times: list[tuple[float, float]] = []
+        for seg in segments:
+            start_s = max(0.0, float(seg.start))
+            end_s = max(start_s + 0.2, float(seg.end))
+            start = int(start_s * sr)
+            end = int(end_s * sr)
+            if end > len(y):
+                end = len(y)
+            clip = y[start:end]
+            # ensure minimum length ~0.5s for embedding quality
+            min_samples = int(0.5 * sr)
+            if clip.shape[0] < min_samples:
+                mid = int(((start + end) / 2))
+                left = max(0, mid - min_samples // 2)
+                right = min(len(y), left + min_samples)
+                clip = y[left:right]
+                # recompute times
+                start_s = left / sr
+                end_s = right / sr
+            if clip.shape[0] <= 0:
+                continue
+            try:
+                emb = encoder.embed_utterance(_np.asarray(clip, dtype=_np.float32))
+            except Exception:
+                continue
+            embeddings.append(emb)
+            seg_times.append((start_s, end_s))
+
+        if len(embeddings) < 2:
+            return []
+
+        X = _np.vstack(embeddings)
+        best_k = 1
+        best_score = -1.0
+        max_k = min(4, len(X))
+        for k in range(2, max_k + 1):
+            try:
+                km = _KMeans(n_clusters=k, random_state=42).fit(X)
+                labels = km.labels_
+                score = _silhouette_score(X, labels) if len(set(labels)) > 1 else -1.0
+                if score > best_score:
+                    best_score = score
+                    best_k = k
+            except Exception:
+                continue
+
+        if best_k <= 1:
+            # single speaker
+            return [(s, e, "spk_0") for (s, e) in seg_times]
+
+        km = _KMeans(n_clusters=best_k, random_state=42).fit(X)
+        labels = km.labels_
+        turns: list[tuple[float, float, str]] = []
+        for (s, e), lab in zip(seg_times, labels):
+            turns.append((s, e, f"spk_{int(lab)}"))
+        return turns
 
 
 def _format_transcript_with_speakers(
