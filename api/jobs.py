@@ -325,7 +325,7 @@ class JobRunner:
             {"file_count": total, "folder": folder},
         )
         batch_start = time.monotonic()
-            for index, path in enumerate(files, start=1):
+        for index, path in enumerate(files, start=1):
             # check cancellation
             if job_id in self._cancellations:
                 raise RuntimeError("Job cancelled by user")

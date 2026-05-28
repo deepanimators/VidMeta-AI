@@ -119,113 +119,110 @@ def _get_diarization_pipeline() -> object | None:
         return _diarization_pipeline or None
 
 
-    def _diarize_offline(audio_path: str, segments: list[TranscriptSegment] | None = None) -> list[tuple[float, float, str]]:
-        """Offline diarization using Resemblyzer + KMeans clustering of segment embeddings.
+def _diarize_offline(audio_path: str, segments: list[TranscriptSegment] | None = None) -> list[tuple[float, float, str]]:
+    """Offline diarization using Resemblyzer + DBSCAN clustering of segment embeddings.
 
-        This is a lightweight best-effort approach that works without Hugging Face tokens.
-        Requires optional packages: `resemblyzer`, `librosa`, `scikit-learn`, `numpy`.
-        """
-        if not segments:
-            return []
+    This is a lightweight best-effort approach that works without Hugging Face tokens.
+    Requires optional packages: `resemblyzer`, `librosa`, `scikit-learn`, `numpy`.
+    """
+    if not segments:
+        return []
+    try:
+        import numpy as _np
+        import librosa as _librosa
+        from resemblyzer import VoiceEncoder as _VoiceEncoder
+        from sklearn.cluster import DBSCAN as _DBSCAN
+        from sklearn.preprocessing import StandardScaler as _StandardScaler
+    except Exception:
+        return []
+
+    # load audio at 16k
+    y, sr = _librosa.load(audio_path, sr=16000, mono=True)
+    encoder = _VoiceEncoder()
+    embeddings: list[_np.ndarray] = []
+    seg_times: list[tuple[float, float]] = []
+    for seg in segments:
+        start_s = max(0.0, float(seg.start))
+        end_s = max(start_s + 0.2, float(seg.end))
+        start = int(start_s * sr)
+        end = int(end_s * sr)
+        if end > len(y):
+            end = len(y)
+        clip = y[start:end]
+        # ensure minimum length ~0.5s for embedding quality
+        min_samples = int(0.5 * sr)
+        if clip.shape[0] < min_samples:
+            mid = int(((start + end) / 2))
+            left = max(0, mid - min_samples // 2)
+            right = min(len(y), left + min_samples)
+            clip = y[left:right]
+            # recompute times
+            start_s = left / sr
+            end_s = right / sr
+        if clip.shape[0] <= 0:
+            continue
         try:
-            import numpy as _np
-            import librosa as _librosa
-            from resemblyzer import VoiceEncoder as _VoiceEncoder
-            from sklearn.cluster import DBSCAN as _DBSCAN
-            from sklearn.preprocessing import StandardScaler as _StandardScaler
+            emb = encoder.embed_utterance(_np.asarray(clip, dtype=_np.float32))
         except Exception:
-            return []
+            continue
+        embeddings.append(emb)
+        seg_times.append((start_s, end_s))
 
-        # load audio at 16k
-        y, sr = _librosa.load(audio_path, sr=16000, mono=True)
-        encoder = _VoiceEncoder()
-        embeddings: list[_np.ndarray] = []
-        seg_times: list[tuple[float, float]] = []
-        for seg in segments:
-            start_s = max(0.0, float(seg.start))
-            end_s = max(start_s + 0.2, float(seg.end))
-            start = int(start_s * sr)
-            end = int(end_s * sr)
-            if end > len(y):
-                end = len(y)
-            clip = y[start:end]
-            # ensure minimum length ~0.5s for embedding quality
-            min_samples = int(0.5 * sr)
-            if clip.shape[0] < min_samples:
-                mid = int(((start + end) / 2))
-                left = max(0, mid - min_samples // 2)
-                right = min(len(y), left + min_samples)
-                clip = y[left:right]
-                # recompute times
-                start_s = left / sr
-                end_s = right / sr
-            if clip.shape[0] <= 0:
-                continue
-            try:
-                emb = encoder.embed_utterance(_np.asarray(clip, dtype=_np.float32))
-            except Exception:
-                continue
-            embeddings.append(emb)
-            seg_times.append((start_s, end_s))
+    if len(embeddings) < 2:
+        return []
 
-        if len(embeddings) < 2:
-            return []
+    X = _np.vstack(embeddings)
+    # scale embeddings for clustering
+    try:
+        Xs = _StandardScaler().fit_transform(X)
+    except Exception:
+        Xs = X
 
-        X = _np.vstack(embeddings)
-        # scale embeddings for clustering
-        try:
-            Xs = _StandardScaler().fit_transform(X)
-        except Exception:
-            Xs = X
+    # DBSCAN auto-detects clusters; eps tuned conservatively, min_samples=1 allows small speaker turns
+    try:
+        db = _DBSCAN(eps=0.6, min_samples=1, metric="euclidean").fit(Xs)
+        labels = db.labels_
+    except Exception:
+        # fallback single speaker
+        return [(s, e, "spk_0") for (s, e) in seg_times]
 
-        # DBSCAN auto-detects clusters; eps tuned conservatively, min_samples=1 allows small speaker turns
-        try:
-            db = _DBSCAN(eps=0.6, min_samples=1, metric="euclidean").fit(Xs)
-            labels = db.labels_
-        except Exception:
-            # fallback single speaker
-            return [(s, e, "spk_0") for (s, e) in seg_times]
-
-        # remap labels (DBSCAN may give -1 for noise)
-        unique = sorted(set(int(l) for l in labels if l is not None))
-        label_map: dict[int, int] = {}
-        next_id = 0
-        turns: list[tuple[float, float, str]] = []
-        for (s, e), lab in zip(seg_times, labels):
-            lab_i = int(lab)
-            if lab_i == -1:
-                # treat noise as its own speaker id
-                lab_key = f"noise_{next_id}"
-                speaker_label = f"spk_{next_id}"
+    # remap labels (DBSCAN may give -1 for noise)
+    label_map: dict[int, int] = {}
+    next_id = 0
+    turns: list[tuple[float, float, str]] = []
+    for (s, e), lab in zip(seg_times, labels):
+        lab_i = int(lab)
+        if lab_i == -1:
+            speaker_label = f"spk_{next_id}"
+            next_id += 1
+        else:
+            if lab_i not in label_map:
+                label_map[lab_i] = next_id
                 next_id += 1
-            else:
-                if lab_i not in label_map:
-                    label_map[lab_i] = next_id
-                    next_id += 1
-                speaker_label = f"spk_{label_map[lab_i]}"
-            turns.append((s, e, speaker_label))
+            speaker_label = f"spk_{label_map[lab_i]}"
+        turns.append((s, e, speaker_label))
 
-        # merge adjacent segments with same speaker
-        return _merge_adjacent_turns(turns)
+    # merge adjacent segments with same speaker
+    return _merge_adjacent_turns(turns)
 
 
-    def _merge_adjacent_turns(turns: list[tuple[float, float, str]], gap_threshold: float = 0.5) -> list[tuple[float, float, str]]:
-        """Merge consecutive turns with the same speaker if gaps are small."""
-        if not turns:
-            return []
-        merged: list[tuple[float, float, str]] = []
-        # ensure sorted by start
-        turns_sorted = sorted(turns, key=lambda x: x[0])
-        cur_s, cur_e, cur_spk = turns_sorted[0]
-        for s, e, spk in turns_sorted[1:]:
-            if spk == cur_spk and s <= cur_e + gap_threshold:
-                # extend current
-                cur_e = max(cur_e, e)
-            else:
-                merged.append((cur_s, cur_e, cur_spk))
-                cur_s, cur_e, cur_spk = s, e, spk
-        merged.append((cur_s, cur_e, cur_spk))
-        return merged
+def _merge_adjacent_turns(turns: list[tuple[float, float, str]], gap_threshold: float = 0.5) -> list[tuple[float, float, str]]:
+    """Merge consecutive turns with the same speaker if gaps are small."""
+    if not turns:
+        return []
+    merged: list[tuple[float, float, str]] = []
+    # ensure sorted by start
+    turns_sorted = sorted(turns, key=lambda x: x[0])
+    cur_s, cur_e, cur_spk = turns_sorted[0]
+    for s, e, spk in turns_sorted[1:]:
+        if spk == cur_spk and s <= cur_e + gap_threshold:
+            # extend current
+            cur_e = max(cur_e, e)
+        else:
+            merged.append((cur_s, cur_e, cur_spk))
+            cur_s, cur_e, cur_spk = s, e, spk
+    merged.append((cur_s, cur_e, cur_spk))
+    return merged
 
 
 def _format_transcript_with_speakers(

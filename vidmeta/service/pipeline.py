@@ -322,7 +322,7 @@ def _build_frame_annotations(
     progress: Callable[[int, str, dict[str, Any] | None], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> str:
-    """Run enabled enrichment on each frame; return a prompt-ready annotation block."""
+    """Run enabled enrichment on each frame; return a prompt-ready annotation block.
 
     Checks `should_cancel()` between frames to allow cooperative cancellation.
     """
