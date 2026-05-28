@@ -675,6 +675,10 @@ progress.progress-bar.large {
 .jobs {
   display: grid;
   gap: 8px;
+  max-height: 332px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .job-row {
