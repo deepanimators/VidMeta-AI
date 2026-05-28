@@ -425,8 +425,15 @@ class JobRunner:
             with open(input_file.name, "w", encoding="utf-8") as f:
                 json.dump(req, f)
 
-            script_path = Path(__file__).resolve().parents[1] / "scripts" / "worker.py"
-            proc = subprocess.Popen([sys.executable, str(script_path), "--input", input_file.name, "--output", output_file.name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = subprocess.Popen([
+                sys.executable,
+                "-m",
+                "vidmeta.worker",
+                "--input",
+                input_file.name,
+                "--output",
+                output_file.name,
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             with self._lock:
                 self._processes[job_id] = proc
 

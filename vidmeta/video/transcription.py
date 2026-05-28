@@ -40,17 +40,7 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
         if not os.path.exists(audio_path):
             return "[No audio track]"
         try:
-            model = _get_whisper_model(model_size)
-            segments, _ = model.transcribe(audio_path, beam_size=3, vad_filter=True)
-            transcript_segments = [
-                TranscriptSegment(
-                    start=float(segment.start or 0.0),
-                    end=float(segment.end or 0.0),
-                    text=str(segment.text or "").strip(),
-                )
-                for segment in segments
-                if str(segment.text or "").strip()
-            ]
+            transcript_segments = _transcribe_segments_from_audio(audio_path, model_size)
             if not transcript_segments:
                 return "[Silent]"
             speaker_turns = _diarize_audio(audio_path, transcript_segments, video_path=video_path)
@@ -69,6 +59,41 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
     finally:
         if os.path.exists(audio_path):
             os.remove(audio_path)
+
+
+def get_transcript_segments(video_path: str, model_size: str) -> list[TranscriptSegment]:
+    """Extract timestamped transcript segments from a video file.
+
+    This helper is used by the offline diarization demo and by transcript rendering.
+    """
+    audio_path = f"{video_path}_audio.wav"
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", video_path, "-ar", "16000", "-ac", "1", "-y", audio_path],
+            capture_output=True,
+            timeout=180,
+            check=False,
+        )
+        if not os.path.exists(audio_path):
+            return []
+        return _transcribe_segments_from_audio(audio_path, model_size)
+    finally:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
+
+def _transcribe_segments_from_audio(audio_path: str, model_size: str) -> list[TranscriptSegment]:
+    model = _get_whisper_model(model_size)
+    segments, _ = model.transcribe(audio_path, beam_size=3, vad_filter=True)
+    return [
+        TranscriptSegment(
+            start=float(segment.start or 0.0),
+            end=float(segment.end or 0.0),
+            text=str(segment.text or "").strip(),
+        )
+        for segment in segments
+        if str(segment.text or "").strip()
+    ]
 
 
 def _diarize_audio(
