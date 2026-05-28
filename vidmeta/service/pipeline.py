@@ -66,12 +66,55 @@ def analyze_video(
     except Exception:
         pass
 
+    # --- Audio transcription ---
+    transcript = ""
+    if video.use_whisper:
+        _progress(
+            progress,
+            "audio",
+            12,
+            f"Extracting audio and transcribing with Whisper {video.whisper_model_size}",
+            {"whisper_model_size": video.whisper_model_size},
+        )
+        transcript = transcribe_audio(file_path, video.whisper_model_size)
+        _progress(
+            progress,
+            "audio",
+            18,
+            "Audio transcription completed",
+            {
+                "transcript": transcript,
+                "transcript_preview": transcript[:1000],
+                "transcript_characters": len(transcript),
+                "whisper_model_size": video.whisper_model_size,
+            },
+        )
+    else:
+        _progress(progress, "audio", 18, "Audio transcription skipped", {"use_whisper": False})
+
     # --- Frame extraction ---
-    _progress(progress, "frames", 10, "Extracting representative video frames")
-    frames_with_ts = extract_frames(file_path, video.frame_interval, video.max_frames)
+    _progress(progress, "frames", 20, "Extracting representative video frames")
+    def frame_stage_progress(start: int, span: int):
+        def _report(value: int, message: str = "", details: dict[str, Any] | None = None) -> None:
+            mapped = start + int((max(0, min(value, 100)) / 100) * span)
+            _progress(progress, "frames", min(start + span, mapped), message, details)
+
+        return _report
+
+    frames_with_ts = extract_frames(
+        file_path,
+        video.frame_interval,
+        video.max_frames,
+        progress=frame_stage_progress(20, 14),
+    )
     frames = [b64 for _, b64 in frames_with_ts]
     frame_timestamps = [ts for ts, _ in frames_with_ts]
-    thumbnails = extract_thumbnails(file_path, video.frame_interval, video.max_frames)
+    thumbnails = extract_thumbnails(
+        file_path,
+        video.frame_interval,
+        video.max_frames,
+        progress=frame_stage_progress(34, 6),
+    )
     _progress(
         progress,
         "frames",
@@ -91,38 +134,17 @@ def analyze_video(
     frame_annotations_block = ""
     any_enrichment = video.enable_object_detection or video.enable_ocr or video.enable_frame_captioning
     if any_enrichment and frames:
-        _progress(progress, "frames", 38, "Running frame enrichment (detection / OCR / captioning)")
-        frame_annotations_block = _build_frame_annotations(frames_with_ts, video)
+        _progress(progress, "frames", 42, "Running frame enrichment (detection / OCR / captioning)")
+        frame_annotations_block = _build_frame_annotations(
+            frames_with_ts,
+            video,
+            progress=frame_stage_progress(42, 8),
+        )
         _progress(
-            progress, "frames", 45,
+            progress, "frames", 50,
             f"Frame enrichment complete — {len(frames_with_ts)} frames annotated",
             {"frame_annotations": frame_annotations_block[:500]},
         )
-
-    # --- Audio transcription ---
-    transcript = ""
-    if video.use_whisper:
-        _progress(
-            progress,
-            "audio",
-            35,
-            f"Extracting audio and transcribing with Whisper {video.whisper_model_size}",
-            {"whisper_model_size": video.whisper_model_size},
-        )
-        transcript = transcribe_audio(file_path, video.whisper_model_size)
-        _progress(
-            progress,
-            "audio",
-            50,
-            "Audio transcription completed",
-            {
-                "transcript_preview": transcript[:1000],
-                "transcript_characters": len(transcript),
-                "whisper_model_size": video.whisper_model_size,
-            },
-        )
-    else:
-        _progress(progress, "audio", 50, "Audio transcription skipped", {"use_whisper": False})
 
     provider_config = ProviderConfig(
         provider=provider.provider,
@@ -255,9 +277,11 @@ def analyze_video(
 def _build_frame_annotations(
     frames_with_ts: list[tuple[float, str]],
     settings: VideoSettings,
+    progress: Callable[[int, str, dict[str, Any] | None], None] | None = None,
 ) -> str:
     """Run enabled enrichment on each frame; return a prompt-ready annotation block."""
     lines: list[str] = []
+    total_frames = max(1, len(frames_with_ts))
     for i, (ts, b64) in enumerate(frames_with_ts):
         mins, secs = divmod(int(ts), 60)
         label = f"{mins}:{secs:02d}"
@@ -280,6 +304,13 @@ def _build_frame_annotations(
 
         if parts:
             lines.append(f"  Frame {i + 1} ({label}): {' | '.join(parts)}")
+
+        if progress:
+            progress(
+                int(((i + 1) / total_frames) * 100),
+                f"Enriched frame {i + 1}/{total_frames}",
+                {"frame_index": i + 1, "frame_total": total_frames},
+            )
 
     if not lines:
         return ""

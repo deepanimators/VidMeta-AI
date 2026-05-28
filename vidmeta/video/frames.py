@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import math
 from dataclasses import dataclass
+from typing import Any, Callable
 
 import cv2
 import numpy as np
@@ -57,7 +58,12 @@ def _aspect_info(width: int, height: int) -> tuple[str, str]:
     return ar, orient
 
 
-def extract_frames(video_path: str, interval_sec: int, max_frames: int) -> list[tuple[float, str]]:
+def extract_frames(
+    video_path: str,
+    interval_sec: int,
+    max_frames: int,
+    progress: Callable[[int, str, dict[str, Any] | None], None] | None = None,
+) -> list[tuple[float, str]]:
     """Extract representative frames as (timestamp_sec, base64_jpeg) tuples.
 
     Frame selection: PySceneDetect ContentDetector (falls back to histogram diff).
@@ -72,13 +78,21 @@ def extract_frames(video_path: str, interval_sec: int, max_frames: int) -> list[
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total / fps if fps else 0.0
         positions = _select_positions(cap, fps, total, duration, interval_sec, max_frames, video_path)
+        _progress(progress, 0, "Preparing representative frame extraction", {"candidate_frames": len(positions)})
 
         # Collect candidates as (timestamp_sec, quality_score, bgr_ndarray)
         candidates: list[tuple[float, float, np.ndarray]] = []
-        for pos in positions:
+        total_positions = max(1, len(positions))
+        for index, pos in enumerate(positions, start=1):
             cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
             ok, frame = cap.read()
             if not ok:
+                _progress(
+                    progress,
+                    int((index / total_positions) * 100),
+                    f"Skipping unreadable frame {index}/{total_positions}",
+                    {"frame_index": index, "frame_total": total_positions},
+                )
                 continue
             ts = pos / fps
             h, w = frame.shape[:2]
@@ -86,6 +100,12 @@ def extract_frames(video_path: str, interval_sec: int, max_frames: int) -> list[
                 frame = cv2.resize(frame, (800, int(h * 800 / w)))
             score = _frame_quality_score(frame)
             candidates.append((ts, score, frame))
+            _progress(
+                progress,
+                int((index / total_positions) * 100),
+                f"Processed frame {index}/{total_positions}",
+                {"frame_index": index, "frame_total": total_positions, "timestamp_sec": round(ts, 2)},
+            )
 
         # Quality filter — fallback to all sorted by score if everything is blurry
         QUALITY_THRESHOLD = 12.0
@@ -101,12 +121,18 @@ def extract_frames(video_path: str, interval_sec: int, max_frames: int) -> list[
             ok2, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
             if ok2:
                 result.append((ts, base64.b64encode(bytes(buf)).decode("ascii")))
+        _progress(progress, 100, f"Selected {len(result)} representative frames", {"frame_count": len(result)})
         return result
     finally:
         cap.release()
 
 
-def extract_thumbnails(video_path: str, interval_sec: int, max_frames: int) -> list[str]:
+def extract_thumbnails(
+    video_path: str,
+    interval_sec: int,
+    max_frames: int,
+    progress: Callable[[int, str, dict[str, Any] | None], None] | None = None,
+) -> list[str]:
     """Extract 180px-wide thumbnails for live UI display."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -116,12 +142,20 @@ def extract_thumbnails(video_path: str, interval_sec: int, max_frames: int) -> l
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total / fps if fps else 0.0
         positions = _select_positions(cap, fps, total, duration, interval_sec, max_frames, video_path)
+        _progress(progress, 0, "Preparing thumbnails", {"candidate_frames": len(positions)})
 
         thumbnails: list[str] = []
-        for pos in positions:
+        total_positions = max(1, len(positions))
+        for index, pos in enumerate(positions, start=1):
             cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
             ok, frame = cap.read()
             if not ok:
+                _progress(
+                    progress,
+                    int((index / total_positions) * 100),
+                    f"Skipping unreadable thumbnail {index}/{total_positions}",
+                    {"frame_index": index, "frame_total": total_positions},
+                )
                 continue
             h, w = frame.shape[:2]
             if w > 180:
@@ -129,6 +163,13 @@ def extract_thumbnails(video_path: str, interval_sec: int, max_frames: int) -> l
             ok2, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
             if ok2:
                 thumbnails.append(base64.b64encode(bytes(buf)).decode("ascii"))
+            _progress(
+                progress,
+                int((index / total_positions) * 100),
+                f"Built thumbnail {index}/{total_positions}",
+                {"frame_index": index, "frame_total": total_positions},
+            )
+        _progress(progress, 100, f"Prepared {len(thumbnails)} thumbnails", {"thumbnail_count": len(thumbnails)})
         return thumbnails[:max_frames]
     finally:
         cap.release()
@@ -252,3 +293,13 @@ def _dedup_similar(
             selected.append(item)
             selected_hists.append(h)
     return selected
+
+
+def _progress(
+    callback: Callable[[int, str, dict[str, Any] | None], None] | None,
+    progress: int,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    if callback:
+        callback(progress, message, details)

@@ -79,6 +79,7 @@ type VideoMetaDetails = {
 type JobEventDetails = {
   thumbnails?: string[];
   video_metadata?: VideoMetaDetails;
+  transcript?: string;
   transcript_preview?: string;
   transcript_characters?: number;
   analysis_preview?: string;
@@ -100,6 +101,7 @@ type JobEvent = {
 type LiveExtractionData = {
   thumbnails: string[];
   videoMetadata: VideoMetaDetails;
+  transcript: string;
   transcriptPreview: string;
   analysisPreview: string;
   visionWarning: string;
@@ -428,12 +430,13 @@ function App() {
       // Pick the last event for each stage that actually carries the relevant data.
       const framesEv = all.filter((e) => e.stage === "frames" && e.details?.thumbnails?.length).pop()
         ?? all.filter((e) => e.stage === "frames").pop();
-      const audioEv = all.filter((e) => e.stage === "audio" && e.details?.transcript_preview).pop()
+      const audioEv = all.filter((e) => e.stage === "audio" && (e.details?.transcript || e.details?.transcript_preview)).pop()
         ?? all.filter((e) => e.stage === "audio").pop();
       const analysisEv = all.filter((e) => e.stage === "analysis" && e.details?.analysis_preview).pop();
       setLiveData({
         thumbnails: framesEv?.details?.thumbnails ?? [],
         videoMetadata: framesEv?.details?.video_metadata ?? {},
+        transcript: audioEv?.details?.transcript ?? audioEv?.details?.transcript_preview ?? "",
         transcriptPreview: audioEv?.details?.transcript_preview ?? "",
         analysisPreview: analysisEv?.details?.analysis_preview ?? "",
         visionWarning: analysisEv?.details?.vision_warning ?? framesEv?.details?.vision_warning ?? "",
@@ -446,20 +449,41 @@ function App() {
     const status = selectedJob?.status;
     if (!selectedJobId || status === "completed" || status === "failed" || !status) return;
     const es = new EventSource(`${API_BASE}/api/jobs/${selectedJobId}/stream`);
+    const updateSelectedJob = (patch: Partial<Job>) => {
+      setJobs((current) => current.map((job) => (job.id === selectedJobId ? { ...job, ...patch } : job)));
+    };
     es.onmessage = (e: MessageEvent<string>) => {
       try {
         const data = JSON.parse(e.data) as { type: string; stage?: string; details?: JobEventDetails };
+        if (data.type === "status") {
+          if (typeof (data as { progress?: number }).progress === "number") {
+            updateSelectedJob({
+              status: (data as { status?: string }).status ?? "running",
+              stage: data.stage ?? status,
+              progress: (data as { progress?: number }).progress ?? 0,
+            });
+          }
+          return;
+        }
         if (data.type !== "event" || !data.details) return;
         const { stage, details } = data;
+        if (typeof (data as { progress?: number }).progress === "number") {
+          updateSelectedJob({
+            status: "running",
+            stage: stage ?? status,
+            progress: (data as { progress?: number }).progress ?? 0,
+          });
+        }
         if (stage === "frames") {
           setLiveData((prev) => ({
             ...prev,
             thumbnails: details.thumbnails ?? prev?.thumbnails ?? [],
             videoMetadata: details.video_metadata ?? prev?.videoMetadata ?? {},
           }));
-        } else if (stage === "audio" && details.transcript_preview) {
+        } else if (stage === "audio" && (details.transcript || details.transcript_preview)) {
           setLiveData((prev) => ({
             ...prev,
+            transcript: details.transcript ?? prev?.transcript ?? details.transcript_preview ?? "",
             transcriptPreview: details.transcript_preview ?? "",
           }));
         } else if (stage === "analysis") {
@@ -1244,8 +1268,9 @@ function formatDuration(seconds: number): string {
 }
 
 function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
-  const { thumbnails = [], videoMetadata = {}, transcriptPreview = "", analysisPreview = "", visionWarning = "" } = data;
-  const hasContent = thumbnails.length > 0 || transcriptPreview || analysisPreview || Object.keys(videoMetadata).length > 0;
+  const { thumbnails = [], videoMetadata = {}, transcript = "", transcriptPreview = "", analysisPreview = "", visionWarning = "" } = data;
+  const transcriptText = transcript || transcriptPreview;
+  const hasContent = thumbnails.length > 0 || transcriptText || analysisPreview || Object.keys(videoMetadata).length > 0;
   if (!hasContent) return null;
   return (
     <div className="live-extraction">
@@ -1284,13 +1309,13 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
           </div>
         </div>
       )}
-      {transcriptPreview && (
+      {transcriptText && (
         <div className="live-section">
           <div className="live-section-head">
             <History size={13} />
             <strong>Transcript</strong>
           </div>
-          <div className="live-text">{transcriptPreview}</div>
+          <div className="live-text">{transcriptText}</div>
         </div>
       )}
       {analysisPreview && (
@@ -1566,7 +1591,7 @@ function titleize(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char: string) => char.toUpperCase());
 }
 
-const DETAIL_SKIP = new Set(["thumbnails", "video_metadata", "transcript_preview", "analysis_preview"]);
+const DETAIL_SKIP = new Set(["thumbnails", "video_metadata", "transcript", "transcript_preview", "analysis_preview"]);
 
 function formatDetails(details: Record<string, unknown>) {
   return Object.entries(details)
