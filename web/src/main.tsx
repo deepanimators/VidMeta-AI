@@ -1301,6 +1301,26 @@ function selectedModelValue(provider: string, model: string) {
   return presets.some((option) => option.value === model) ? model : CUSTOM_MODEL_VALUE;
 }
 
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
+}
+
 async function canUseDesktopDialog() {
   try {
     const core = await import("@tauri-apps/api/core");
@@ -1403,7 +1423,7 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
             <History size={13} />
             <strong>Transcript</strong>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="mini-button" onClick={() => navigator.clipboard.writeText(transcriptText)}>Copy</button>
+              <button className="mini-button" onClick={() => void copyTextToClipboard(transcriptText)}>Copy</button>
             </div>
           </div>
           <div className="live-text">{transcriptText}</div>
@@ -1415,7 +1435,7 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
             <CheckCircle2 size={13} />
             <strong>Visual Analysis</strong>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="mini-button" onClick={() => navigator.clipboard.writeText(analysisPreview)}>Copy</button>
+              <button className="mini-button" onClick={() => void copyTextToClipboard(analysisPreview)}>Copy</button>
             </div>
           </div>
           <div className="live-text">{analysisPreview}</div>
@@ -1558,8 +1578,8 @@ function MetadataView({ metadata, analysis, transcript }: { metadata: Record<str
       <details>
         <summary>Analysis and transcript</summary>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <button className="mini-button" onClick={() => navigator.clipboard.writeText(analysis)}>Copy Analysis</button>
-          <button className="mini-button" onClick={() => navigator.clipboard.writeText(transcript)}>Copy Transcript</button>
+          <button className="mini-button" onClick={() => void copyTextToClipboard(analysis)}>Copy Analysis</button>
+          <button className="mini-button" onClick={() => void copyTextToClipboard(transcript)}>Copy Transcript</button>
         </div>
         <pre>{analysis}</pre>
         <pre>{transcript}</pre>

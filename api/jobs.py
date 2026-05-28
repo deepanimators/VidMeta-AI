@@ -198,6 +198,8 @@ class JobRunner:
     def _remove_future(self, job_id: str) -> None:
         with self._lock:
             self._futures.pop(job_id, None)
+            self._processes.pop(job_id, None)
+            self._cancellations.discard(job_id)
 
     def _run(self, job_id: str) -> None:
         job = self.db.get_job(job_id)
@@ -291,6 +293,9 @@ class JobRunner:
         finally:
             if processing_temp:
                 cleanup_processing_file(processing_temp)
+            with self._lock:
+                self._processes.pop(job_id, None)
+                self._cancellations.discard(job_id)
 
     def _record_progress(
         self,
