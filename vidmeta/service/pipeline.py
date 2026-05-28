@@ -31,6 +31,7 @@ def analyze_video(
     provider: ProviderSettings,
     target_platforms: list[str] | None = None,
     progress: Callable[[str, int, str, dict[str, Any] | None], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> dict:
     file_path = str(Path(path).expanduser())
     if not os.path.isfile(file_path):
@@ -77,6 +78,8 @@ def analyze_video(
             {"whisper_model_size": video.whisper_model_size},
         )
         transcript = transcribe_audio(file_path, video.whisper_model_size)
+        if should_cancel and should_cancel():
+            raise RuntimeError("Job cancelled by user")
         _progress(
             progress,
             "audio",
@@ -107,6 +110,8 @@ def analyze_video(
         video.max_frames,
         progress=frame_stage_progress(20, 14),
     )
+    if should_cancel and should_cancel():
+        raise RuntimeError("Job cancelled by user")
     frames = [b64 for _, b64 in frames_with_ts]
     frame_timestamps = [ts for ts, _ in frames_with_ts]
     thumbnails = extract_thumbnails(
@@ -139,6 +144,7 @@ def analyze_video(
             frames_with_ts,
             video,
             progress=frame_stage_progress(42, 8),
+            should_cancel=should_cancel,
         )
         _progress(
             progress, "frames", 50,
@@ -193,6 +199,42 @@ def analyze_video(
         max_tokens=120000,
         video_path=file_path, frame_timestamps=frame_timestamps,
     )
+    if should_cancel and should_cancel():
+        raise RuntimeError("Job cancelled by user")
+    # If the provider truncated the response, attempt to continue the generation
+    def _looks_truncated(text: str) -> bool:
+        if not text:
+            return True
+        t = text.strip()
+        # heuristics: ends with ellipsis or last char not a terminal punctuation
+        if t.endswith("..."):
+            return True
+        if t[-1] not in {'.', '!', '?', '"', "'"}:
+            # short responses that are incomplete are suspicious
+            if len(t) < 400 or t.count('\n') < 3:
+                return True
+        return False
+
+    def _call_llm_with_continuation(frames, prompt, config, max_tokens=120000, video_path="", timestamps=None, max_attempts=3):
+        text = call_llm(frames, prompt, config, max_tokens=max_tokens, video_path=video_path, frame_timestamps=timestamps)
+        attempts = 1
+        while attempts < max_attempts and _looks_truncated(text):
+            # Ask provider to continue; don't resend images to save bandwidth for continuation
+            cont_prompt = (
+                "The previous response was truncated. Please continue the analysis from where it left off. "
+                "Continue the analysis and finish any incomplete sentences or lists.\n\nPrevious output:\n" + text
+            )
+            try:
+                more = call_llm([], cont_prompt, config, max_tokens=max_tokens, video_path="", frame_timestamps=None)
+                if not more or more.strip() == text.strip():
+                    break
+                text = text.rstrip() + "\n\n" + more.lstrip()
+            except Exception:
+                break
+            attempts += 1
+        return text
+
+    analysis = _call_llm_with_continuation(frames, analysis_prompt, provider_config, max_tokens=120000, video_path=file_path, timestamps=frame_timestamps)
     _progress(
         progress,
         "analysis",
@@ -225,7 +267,7 @@ def analyze_video(
         platform_json_template=platform_json_template(selected_platforms),
     )
     metadata_token_budget = _metadata_token_budget(len(selected_platforms))
-    raw_metadata = call_llm([], metadata_prompt, provider_config, max_tokens=metadata_token_budget)
+    raw_metadata = _call_llm_with_continuation([], metadata_prompt, provider_config, max_tokens=metadata_token_budget)
     metadata = parse_metadata(raw_metadata, target_platforms=selected_platforms)
     missing_platforms = _missing_platforms(metadata, selected_platforms)
     if missing_platforms:
@@ -278,11 +320,17 @@ def _build_frame_annotations(
     frames_with_ts: list[tuple[float, str]],
     settings: VideoSettings,
     progress: Callable[[int, str, dict[str, Any] | None], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> str:
     """Run enabled enrichment on each frame; return a prompt-ready annotation block."""
+
+    Checks `should_cancel()` between frames to allow cooperative cancellation.
+    """
     lines: list[str] = []
     total_frames = max(1, len(frames_with_ts))
     for i, (ts, b64) in enumerate(frames_with_ts):
+        if should_cancel and should_cancel():
+            raise RuntimeError("Job cancelled by user")
         mins, secs = divmod(int(ts), 60)
         label = f"{mins}:{secs:02d}"
         parts: list[str] = []

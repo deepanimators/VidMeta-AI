@@ -4,6 +4,10 @@ import os
 import threading
 import time
 import uuid
+import subprocess
+import json
+import tempfile
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
@@ -46,6 +50,7 @@ class JobRunner:
         self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="vidmeta-job")
         self._lock = threading.Lock()
         self._futures: dict[str, object] = {}
+        self._processes: dict[str, subprocess.Popen] = {}
         self._cancellations: set[str] = set()
 
     def create_from_path(self, payload: dict) -> dict:
@@ -178,6 +183,13 @@ class JobRunner:
                     fut.cancel()
             except Exception:
                 pass
+            # attempt to terminate subprocess if running
+            proc = self._processes.get(job_id)
+            try:
+                if proc and proc.pid:
+                    proc.terminate()
+            except Exception:
+                pass
             # update DB to reflect requested stop
             self.db.update_job(job_id, status="failed", stage="cancelled", error_message="Job cancelled by user", completed_at="CURRENT_TIMESTAMP")
             self.db.add_job_event(job_id, "cancelled", int(job.get("progress") or 0), "Job cancelled by user")
@@ -230,13 +242,14 @@ class JobRunner:
                     progress,
                 )
             else:
-                result = analyze_video(
+                result = self._spawn_worker_and_wait(
+                    job_id,
                     job["source_path"],
-                    brand=brand_model,
-                    video=video_model,
-                    provider=provider_model,
-                    target_platforms=target_platforms,
-                    progress=progress,
+                    brand_model,
+                    video_model,
+                    provider_model,
+                    target_platforms,
+                    progress,
                 )
             self.db.save_result(
                 job_id,
@@ -312,7 +325,7 @@ class JobRunner:
             {"file_count": total, "folder": folder},
         )
         batch_start = time.monotonic()
-        for index, path in enumerate(files, start=1):
+            for index, path in enumerate(files, start=1):
             # check cancellation
             if job_id in self._cancellations:
                 raise RuntimeError("Job cancelled by user")
@@ -353,13 +366,14 @@ class JobRunner:
                     merged_details,
                 )
 
-            item = analyze_video(
+            item = self._spawn_worker_and_wait(
+                job_id,
                 str(path),
-                brand=brand,
-                video=video,
-                provider=provider,
-                target_platforms=target_platforms,
-                progress=batch_progress,
+                brand,
+                video,
+                provider,
+                target_platforms,
+                batch_progress,
             )
             transcripts.append(f"## {path.name}\n{item['transcript']}")
             analyses.append(f"## {path.name}\n{item['analysis']}")
@@ -380,6 +394,88 @@ class JobRunner:
             },
             "raw_output": None,
         }
+
+    def _spawn_worker_and_wait(
+        self,
+        job_id: str,
+        source_path: str,
+        brand: BrandContext,
+        video: VideoSettings,
+        provider: ProviderSettings,
+        target_platforms: list[str] | None,
+        progress: Callable[[str, int, str, dict[str, Any] | None], None] | None,
+    ) -> dict[str, Any]:
+        # prepare request JSON
+        req = {
+            "source_path": source_path,
+            "brand": brand.model_dump() if hasattr(brand, "model_dump") else brand,
+            "video": video.model_dump() if hasattr(video, "model_dump") else video,
+            "provider": provider.model_dump() if hasattr(provider, "model_dump") else provider,
+            "target_platforms": target_platforms,
+        }
+        input_file = tempfile.NamedTemporaryFile(prefix=f"vidmeta_req_{job_id}_", suffix=".json", delete=False)
+        output_file = tempfile.NamedTemporaryFile(prefix=f"vidmeta_res_{job_id}_", suffix=".json", delete=False)
+        try:
+            with open(input_file.name, "w", encoding="utf-8") as f:
+                json.dump(req, f)
+
+            script_path = Path(__file__).resolve().parents[1] / "scripts" / "worker.py"
+            proc = subprocess.Popen([sys.executable, str(script_path), "--input", input_file.name, "--output", output_file.name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            with self._lock:
+                self._processes[job_id] = proc
+
+            # wait loop with cancellation checks
+            while True:
+                if proc.poll() is not None:
+                    break
+                if job_id in self._cancellations:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+                    # give it a moment then kill
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                    break
+                time.sleep(0.5)
+
+            stdout, stderr = proc.communicate(timeout=1)
+            # cleanup process mapping
+            with self._lock:
+                self._processes.pop(job_id, None)
+
+            # read output file
+            try:
+                with open(output_file.name, "r", encoding="utf-8") as fo:
+                    out = json.load(fo)
+            except Exception as exc:
+                raise RuntimeError(f"Worker failed: {stderr.decode() if stderr else exc}") from exc
+
+            if not out.get("ok"):
+                raise RuntimeError(out.get("error") or "Worker reported failure")
+            return out.get("result") or {}
+        finally:
+            try:
+                input_file.close()
+            except Exception:
+                pass
+            try:
+                output_file.close()
+            except Exception:
+                pass
+            try:
+                Path(input_file.name).unlink(missing_ok=True)
+            except Exception:
+                pass
+            try:
+                Path(output_file.name).unlink(missing_ok=True)
+            except Exception:
+                pass
 
     @staticmethod
     def _video_files(folder: Path) -> list[Path]:

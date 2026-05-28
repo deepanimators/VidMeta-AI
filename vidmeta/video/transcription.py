@@ -131,8 +131,8 @@ def _get_diarization_pipeline() -> object | None:
             import numpy as _np
             import librosa as _librosa
             from resemblyzer import VoiceEncoder as _VoiceEncoder
-            from sklearn.cluster import KMeans as _KMeans
-            from sklearn.metrics import silhouette_score as _silhouette_score
+            from sklearn.cluster import DBSCAN as _DBSCAN
+            from sklearn.preprocessing import StandardScaler as _StandardScaler
         except Exception:
             return []
 
@@ -172,30 +172,60 @@ def _get_diarization_pipeline() -> object | None:
             return []
 
         X = _np.vstack(embeddings)
-        best_k = 1
-        best_score = -1.0
-        max_k = min(4, len(X))
-        for k in range(2, max_k + 1):
-            try:
-                km = _KMeans(n_clusters=k, random_state=42).fit(X)
-                labels = km.labels_
-                score = _silhouette_score(X, labels) if len(set(labels)) > 1 else -1.0
-                if score > best_score:
-                    best_score = score
-                    best_k = k
-            except Exception:
-                continue
+        # scale embeddings for clustering
+        try:
+            Xs = _StandardScaler().fit_transform(X)
+        except Exception:
+            Xs = X
 
-        if best_k <= 1:
-            # single speaker
+        # DBSCAN auto-detects clusters; eps tuned conservatively, min_samples=1 allows small speaker turns
+        try:
+            db = _DBSCAN(eps=0.6, min_samples=1, metric="euclidean").fit(Xs)
+            labels = db.labels_
+        except Exception:
+            # fallback single speaker
             return [(s, e, "spk_0") for (s, e) in seg_times]
 
-        km = _KMeans(n_clusters=best_k, random_state=42).fit(X)
-        labels = km.labels_
+        # remap labels (DBSCAN may give -1 for noise)
+        unique = sorted(set(int(l) for l in labels if l is not None))
+        label_map: dict[int, int] = {}
+        next_id = 0
         turns: list[tuple[float, float, str]] = []
         for (s, e), lab in zip(seg_times, labels):
-            turns.append((s, e, f"spk_{int(lab)}"))
-        return turns
+            lab_i = int(lab)
+            if lab_i == -1:
+                # treat noise as its own speaker id
+                lab_key = f"noise_{next_id}"
+                speaker_label = f"spk_{next_id}"
+                next_id += 1
+            else:
+                if lab_i not in label_map:
+                    label_map[lab_i] = next_id
+                    next_id += 1
+                speaker_label = f"spk_{label_map[lab_i]}"
+            turns.append((s, e, speaker_label))
+
+        # merge adjacent segments with same speaker
+        return _merge_adjacent_turns(turns)
+
+
+    def _merge_adjacent_turns(turns: list[tuple[float, float, str]], gap_threshold: float = 0.5) -> list[tuple[float, float, str]]:
+        """Merge consecutive turns with the same speaker if gaps are small."""
+        if not turns:
+            return []
+        merged: list[tuple[float, float, str]] = []
+        # ensure sorted by start
+        turns_sorted = sorted(turns, key=lambda x: x[0])
+        cur_s, cur_e, cur_spk = turns_sorted[0]
+        for s, e, spk in turns_sorted[1:]:
+            if spk == cur_spk and s <= cur_e + gap_threshold:
+                # extend current
+                cur_e = max(cur_e, e)
+            else:
+                merged.append((cur_s, cur_e, cur_spk))
+                cur_s, cur_e, cur_spk = s, e, spk
+        merged.append((cur_s, cur_e, cur_spk))
+        return merged
 
 
 def _format_transcript_with_speakers(

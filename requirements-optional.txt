@@ -12,3 +12,7 @@ ultralytics>=8.3.0
 easyocr>=1.7.0
 moondream>=1.1.0
 pyannote.audio>=3.3.2
+resemblyzer
+librosa
+scikit-learn
+numpy

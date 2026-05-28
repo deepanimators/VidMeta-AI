@@ -690,6 +690,7 @@ function App() {
   }
 
   async function stopJob(jobId: string) {
+    if (!confirm("Stop this job? This will attempt to cancel analysis.")) return;
     try {
       await api(`/api/jobs/${jobId}/stop`, { method: "POST" });
       setMessage("Stop requested");
