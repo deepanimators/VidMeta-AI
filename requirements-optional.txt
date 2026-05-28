@@ -6,7 +6,9 @@
 # ultralytics: YOLO object detection per frame (~700MB PyTorch)
 # easyocr: OCR text extraction from frames
 # moondream: moondream2 frame captioning (~900MB model on first use)
+# pyannote.audio: optional speaker diarization for labeled transcripts
 scenedetect>=0.6.4
 ultralytics>=8.3.0
 easyocr>=1.7.0
 moondream>=1.1.0
+pyannote.audio>=3.3.2

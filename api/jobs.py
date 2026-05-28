@@ -11,7 +11,17 @@ from typing import Any, Callable
 from vidmeta.ai.prompts import normalize_platforms
 from vidmeta.service.database import Database
 from vidmeta.service.pipeline import analyze_video
-from vidmeta.settings import VIDEO_EXTENSIONS, AppSettings, BrandContext, ProviderSettings, VideoSettings, allowed_paths
+from vidmeta.settings import (
+    DESKTOP_APP_MODE,
+    VIDEO_EXTENSIONS,
+    AppSettings,
+    BrandContext,
+    ProviderSettings,
+    VideoSettings,
+    allowed_paths,
+    desktop_safe_provider_settings,
+    desktop_safe_storage_settings,
+)
 from vidmeta.storage.backends import cleanup_processing_file, import_local_file_if_needed, materialize_for_processing
 from vidmeta.video.validation import is_valid_video_header
 
@@ -52,6 +62,7 @@ class JobRunner:
 
         job_id = uuid.uuid4().hex
         settings = self.db.get_settings()
+        request = self._normalize_request(payload, settings)
         actual_source = str(source_path)
         if source_path.is_file():
             actual_source = import_local_file_if_needed(str(source_path), job_id, settings.storage_settings)
@@ -65,7 +76,7 @@ class JobRunner:
                 "status": "queued",
                 "stage": "queued",
                 "progress": 0,
-                "request": payload,
+                "request": request,
             }
         )
         self.enqueue(job_id)
@@ -78,6 +89,7 @@ class JobRunner:
         if upload["status"] not in {"complete", "stored"}:
             raise ValueError("Upload is not complete")
         settings = self.db.get_settings()
+        request = self._normalize_request(payload, settings)
         source = materialize_for_processing(
             upload["path"],
             upload_id,
@@ -94,7 +106,7 @@ class JobRunner:
                 "status": "queued",
                 "stage": "queued",
                 "progress": 0,
-                "request": payload,
+                "request": request,
             }
         )
         self.enqueue(job_id)
@@ -111,8 +123,10 @@ class JobRunner:
             raise FileNotFoundError(f"Source file no longer exists: {source_path}")
         # Merge provider override so the new job uses the chosen model.
         request = dict(job.get("request", {}))
+        settings = self.db.get_settings()
         if provider_override:
             request["provider_settings"] = provider_override
+        request = self._normalize_request(request, settings)
         new_id = uuid.uuid4().hex
         new_job = self.db.create_job(
             {
@@ -129,6 +143,15 @@ class JobRunner:
         self.enqueue(new_id)
         return new_job
 
+    def _normalize_request(self, payload: dict[str, Any], settings: AppSettings) -> dict[str, Any]:
+        request = dict(payload)
+        if settings.app_mode != DESKTOP_APP_MODE:
+            return request
+        request["app_mode"] = DESKTOP_APP_MODE
+        request["provider_settings"] = desktop_safe_provider_settings(request.get("provider_settings"))
+        request["storage_settings"] = desktop_safe_storage_settings(request.get("storage_settings"))
+        return request
+
     def enqueue(self, job_id: str) -> None:
         with self._lock:
             future = self.executor.submit(self._run, job_id)
@@ -144,11 +167,11 @@ class JobRunner:
         job = self.db.get_job(job_id)
         if not job:
             return
-        request = job["request"]
         processing_temp: str | None = None
         try:
             self._record_progress(job_id, "starting", 1, "Preparing job settings and source")
             settings = self.db.get_settings()
+            request = self._normalize_request(job.get("request", {}), settings)
             brand = request.get("brand_context") or settings.brand_context.model_dump()
             video = request.get("video_settings") or settings.video_settings.model_dump()
             provider = request.get("provider_settings") or settings.provider_settings.model_dump()

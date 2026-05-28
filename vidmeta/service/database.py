@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vidmeta.settings import AppSettings, database_path
+from vidmeta.settings import force_desktop_local_settings
 
 
 SCHEMA = """
@@ -139,12 +140,13 @@ class Database:
         with self.connect() as conn:
             row = conn.execute("SELECT value_json FROM settings WHERE key = 'app'").fetchone()
         if not row:
-            return AppSettings()
+            return force_desktop_local_settings(AppSettings())
         raw = json.loads(row["value_json"])
         decrypted = _decrypt_settings(raw)
-        return AppSettings.model_validate(decrypted)
+        return force_desktop_local_settings(AppSettings.model_validate(decrypted))
 
     def save_settings(self, settings: AppSettings) -> AppSettings:
+        settings = force_desktop_local_settings(settings)
         raw = json.loads(settings.model_dump_json())
         encrypted = _encrypt_settings(raw)
         payload = json.dumps(encrypted)

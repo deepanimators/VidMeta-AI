@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+DESKTOP_APP_MODE = "desktop"
+LOCAL_PROVIDER = "ollama"
+LOCAL_STORAGE_BACKEND = "local_disk"
 
 
 def data_dir() -> Path:
@@ -91,3 +94,34 @@ class AppSettings(BaseModel):
     video_settings: VideoSettings = Field(default_factory=VideoSettings)
     provider_settings: ProviderSettings = Field(default_factory=ProviderSettings)
     storage_settings: StorageSettings = Field(default_factory=StorageSettings)
+
+
+def desktop_safe_provider_settings(provider_settings: ProviderSettings | dict[str, object] | None = None) -> dict[str, object]:
+    data = ProviderSettings.model_validate(provider_settings or ProviderSettings()).model_dump()
+    data["provider"] = LOCAL_PROVIDER
+    data["model"] = data.get("model") or "gemma3:4b"
+    data["api_key"] = ""
+    data["api_base"] = ""
+    data["ollama_url"] = data.get("ollama_url") or "http://localhost:11434"
+    return data
+
+
+def desktop_safe_storage_settings(storage_settings: StorageSettings | dict[str, object] | None = None) -> dict[str, object]:
+    data = StorageSettings.model_validate(storage_settings or StorageSettings()).model_dump()
+    data["backend"] = LOCAL_STORAGE_BACKEND
+    data["s3_endpoint_url"] = ""
+    data["s3_bucket"] = ""
+    data["s3_region"] = ""
+    data["s3_access_key_id"] = ""
+    data["s3_secret_access_key"] = ""
+    return data
+
+
+def force_desktop_local_settings(settings: AppSettings) -> AppSettings:
+    if settings.app_mode != DESKTOP_APP_MODE:
+        return settings
+    data = settings.model_dump()
+    data["app_mode"] = DESKTOP_APP_MODE
+    data["provider_settings"] = desktop_safe_provider_settings(settings.provider_settings)
+    data["storage_settings"] = desktop_safe_storage_settings(settings.storage_settings)
+    return AppSettings.model_validate(data)

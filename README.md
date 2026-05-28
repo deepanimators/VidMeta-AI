@@ -13,6 +13,7 @@ VidMeta AI is a local-first AI video metadata service. It analyzes local videos 
 - **Resumable uploads** — TUS protocol for large files with automatic resume on reconnect
 - **5 LLM providers** — Ollama (local), OpenAI, Anthropic, Gemini, OpenRouter; switch without code changes
 - **Audio transcription** — Faster-Whisper with thread-safe model caching; warm subsequent jobs
+- **Speaker labels** — optional diarization support for full transcripts when `pyannote.audio` is installed and a Hugging Face token is available
 - **Batch processing** — point at a folder to analyze all video files in one job with ETA
 - **Encrypted secrets** — API keys and S3 credentials encrypted at rest (AES-256 Fernet)
 - **Platform constraints** — titles and descriptions truncated to platform character limits post-LLM
@@ -93,6 +94,8 @@ cd ../desktop && npm install && npm run dev
 ```
 
 The desktop shell enables native file/folder picking — the preferred workflow for large local videos with no upload size limit.
+
+Desktop mode is locked to the local backend, local Ollama, and local disk storage. External API providers are disabled in the desktop UI and the backend sanitizes desktop settings to keep the runtime local-only.
 
 Installer builds:
 

@@ -137,6 +137,7 @@ type JobResult = Job & {
 const _isTauri = typeof window !== "undefined" && Boolean(
   (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 );
+const isDesktopApp = _isTauri;
 const API_BASE = _isTauri ? "http://127.0.0.1:8000" : (import.meta.env.VITE_API_BASE ?? "");
 const CUSTOM_MODEL_VALUE = "__custom__";
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm", "m4v"]);
@@ -316,7 +317,7 @@ async function api<T>(path: string, init?: RequestInit, timeoutMs = 30_000): Pro
 }
 
 const defaultSettings: AppSettings = {
-  app_mode: "local",
+  app_mode: isDesktopApp ? "desktop" : "local",
   max_upload_mb: 2048,
   upload_retention_days: 0,
   brand_context: {
@@ -536,11 +537,12 @@ function App() {
   async function saveSettings() {
     setBusy(true);
     try {
+      const payload = sanitizeSettingsForEnvironment(settings);
       const saved = await api<AppSettings>("/api/settings", {
         method: "PUT",
-        body: JSON.stringify(settings)
+        body: JSON.stringify(payload)
       });
-      setSettings(saved);
+      setSettings(normalizeSettings(saved));
       setMessage("Settings saved");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Settings save failed");
@@ -724,6 +726,13 @@ function App() {
           </div>
         </div>
 
+        {isDesktopApp && (
+          <section className="panel compact">
+            <h2><HardDrive size={18} /> Runtime</h2>
+            <p className="mode-note">Desktop mode is locked to the local backend, local Ollama, and local disk storage.</p>
+          </section>
+        )}
+
         {/* <section className="panel compact">
           <h2><HardDrive size={18} /> Runtime</h2>
           <select aria-label="App mode" value={settings.app_mode} onChange={(event) => updateSettings("app_mode", event.target.value)}>
@@ -742,14 +751,17 @@ function App() {
             aria-label="AI provider"
             value={settings.provider_settings.provider}
             onChange={(event) => selectProvider(event.target.value)}
+            disabled={isDesktopApp}
           >
             <option value="ollama">Ollama local</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="gemini">Gemini</option>
-            <option value="nvidia">NVIDIA NIM</option>
-            <option value="groq">Groq</option>
+            {!isDesktopApp && <>
+              <option value="openrouter">OpenRouter</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="gemini">Gemini</option>
+              <option value="nvidia">NVIDIA NIM</option>
+              <option value="groq">Groq</option>
+            </>}
           </select>
           <select
             aria-label="Model"
@@ -769,18 +781,19 @@ function App() {
           {settings.provider_settings.provider === "ollama" ? (
             <input value={settings.provider_settings.ollama_url} onChange={(event) => updateProvider("ollama_url", event.target.value)} placeholder="Ollama URL" />
           ) : (
-            <>
+            !isDesktopApp && <>
               <div className="key-input-wrap">
                 <input value={settings.provider_settings.api_key} onChange={(event) => updateApiKey(event.target.value)} placeholder="API key" type={showApiKey ? "text" : "password"} />
                 <button type="button" className="key-toggle" onClick={() => setShowApiKey((v) => !v)} aria-label={showApiKey ? "Hide API key" : "Show API key"}>
                   {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
-              {["openrouter", "openai"].includes(settings.provider_settings.provider) && (
+              {['openrouter', 'openai'].includes(settings.provider_settings.provider) && (
                 <input value={settings.provider_settings.api_base} onChange={(event) => updateProvider("api_base", event.target.value)} placeholder="API base URL (optional)" />
               )}
             </>
           )}
+          {isDesktopApp && <p className="mode-note">External providers are disabled in desktop mode.</p>}
         </section>
 
         <section className="panel compact">
@@ -789,10 +802,12 @@ function App() {
             aria-label="Storage backend"
             value={settings.storage_settings.backend}
             onChange={(event) => updateStorage("backend", event.target.value)}
+            disabled={isDesktopApp}
           >
             <option value="local_disk">Local server disk</option>
-            <option value="s3_compatible">S3 compatible</option>
+            {!isDesktopApp && <option value="s3_compatible">S3 compatible</option>}
           </select>
+          {isDesktopApp && <p className="mode-note">Desktop mode keeps storage local; S3 settings are unavailable.</p>}
           <label className="check">
             <input
               type="checkbox"
@@ -947,6 +962,7 @@ function App() {
           {selectedJob?.status === "failed" && (
             <RetryPanel
               job={selectedJob}
+              localOnly={isDesktopApp}
               onRetry={(ps) => void retryJob(selectedJob.id, ps)}
             />
           )}
@@ -1193,17 +1209,43 @@ function PlatformPicker({
 }
 
 function normalizeSettings(settings: AppSettings): AppSettings {
-  const provider = settings.provider_settings.provider || "ollama";
+  const provider = isDesktopApp ? "ollama" : (settings.provider_settings.provider || "ollama");
   const model =
     provider === "ollama" && settings.provider_settings.model === "gemma4"
       ? DEFAULT_MODEL_BY_PROVIDER.ollama
       : settings.provider_settings.model || DEFAULT_MODEL_BY_PROVIDER[provider] || "";
-  return {
+  return sanitizeSettingsForEnvironment({
     ...settings,
+    app_mode: isDesktopApp ? "desktop" : (settings.app_mode || "local"),
     provider_settings: {
       ...settings.provider_settings,
       provider,
       model
+    }
+  });
+}
+
+function sanitizeSettingsForEnvironment(settings: AppSettings): AppSettings {
+  if (!isDesktopApp) return settings;
+  return {
+    ...settings,
+    app_mode: "desktop",
+    provider_settings: {
+      ...settings.provider_settings,
+      provider: "ollama",
+      model: settings.provider_settings.provider === "ollama" ? (settings.provider_settings.model || DEFAULT_MODEL_BY_PROVIDER.ollama) : DEFAULT_MODEL_BY_PROVIDER.ollama,
+      api_key: "",
+      api_base: "",
+      ollama_url: settings.provider_settings.ollama_url || "http://localhost:11434"
+    },
+    storage_settings: {
+      ...settings.storage_settings,
+      backend: "local_disk",
+      s3_endpoint_url: "",
+      s3_bucket: "",
+      s3_region: "",
+      s3_access_key_id: "",
+      s3_secret_access_key: ""
     }
   };
 }
@@ -1331,9 +1373,9 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
   );
 }
 
-function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSettings) => void }) {
+function RetryPanel({ job, onRetry, localOnly = false }: { job: Job; onRetry: (ps?: ProviderSettings) => void; localOnly?: boolean }) {
   const orig = job.request?.provider_settings;
-  const [provider, setProvider] = React.useState(orig?.provider ?? "ollama");
+  const [provider, setProvider] = React.useState(localOnly ? "ollama" : (orig?.provider ?? "ollama"));
   const [model, setModel] = React.useState(orig?.model ?? DEFAULT_MODEL_BY_PROVIDER.ollama);
   const [apiKey, setApiKey] = React.useState(orig?.api_key ?? "");
   const [apiBase, setApiBase] = React.useState(orig?.api_base ?? "");
@@ -1341,6 +1383,7 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
   const [showKey, setShowKey] = React.useState(false);
 
   function handleProviderChange(next: string) {
+    if (localOnly) return;
     const saved: Record<string, string> = (() => {
       try { return JSON.parse(localStorage.getItem("vidmeta_provider_keys") ?? "{}"); } catch { return {}; }
     })();
@@ -1355,6 +1398,9 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
   const modelValue = selectedModelValue(provider, model);
 
   function buildSettings(): ProviderSettings {
+    if (localOnly) {
+      return { provider: "ollama", model, api_key: "", api_base: "", ollama_url: ollamaUrl };
+    }
     return { provider, model, api_key: apiKey, api_base: apiBase, ollama_url: ollamaUrl };
   }
 
@@ -1365,15 +1411,19 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
         <strong>Retry with different settings</strong>
       </div>
       <div className="retry-fields">
-        <select aria-label="Retry provider" value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
-          <option value="ollama">Ollama local</option>
-          <option value="openrouter">OpenRouter</option>
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="gemini">Gemini</option>
-          <option value="nvidia">NVIDIA NIM</option>
-          <option value="groq">Groq</option>
-        </select>
+        {localOnly ? (
+          <p className="mode-note">Desktop retries are locked to local Ollama.</p>
+        ) : (
+          <select aria-label="Retry provider" value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
+            <option value="ollama">Ollama local</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Gemini</option>
+            <option value="nvidia">NVIDIA NIM</option>
+            <option value="groq">Groq</option>
+          </select>
+        )}
         <select aria-label="Retry model" value={modelValue} onChange={(e) => { if (e.target.value === CUSTOM_MODEL_VALUE) { setModel(""); } else { setModel(e.target.value); } }}>
           {(MODEL_PRESETS[provider] ?? []).map((m) => (
             <option value={m.value} key={m.value}>{m.label}{m.note ? ` - ${m.note}` : ""}</option>
@@ -1386,7 +1436,7 @@ function RetryPanel({ job, onRetry }: { job: Job; onRetry: (ps?: ProviderSetting
         {provider === "ollama" ? (
           <input value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)} placeholder="Ollama URL" />
         ) : (
-          <>
+          !localOnly && <>
             <div className="key-input-wrap">
               <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key" type={showKey ? "text" : "password"} />
               <button type="button" className="key-toggle" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? "Hide API key" : "Show API key"}>
