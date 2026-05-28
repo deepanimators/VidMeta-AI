@@ -40,8 +40,9 @@ def export_csv(metadata: dict[str, Any]) -> str:
 
 
 def export_txt(metadata: dict[str, Any]) -> str:
+    legend = "LEGEND: Speaker N is the voice cluster; Face N is the sampled face cluster."
     if isinstance(metadata.get("batch_results"), list):
-        return _export_batch_txt(metadata["batch_results"])
+        return f"{legend}\n\n{_export_batch_txt(metadata['batch_results'])}"
     sections: list[str] = []
     for platform, data in _platform_entries(metadata):
         tags = data.get("hashtags", [])
@@ -55,7 +56,9 @@ def export_txt(metadata: dict[str, Any]) -> str:
             f"CTA: {data.get('cta', '')}\n"
             f"POSTING TIP: {data.get('posting_tip', '')}\n"
         )
-    return "\n\n".join(sections)
+    if not sections:
+        return legend
+    return f"{legend}\n\n" + "\n\n".join(sections)
 
 
 def _export_batch_csv(results: list[dict[str, Any]]) -> str:

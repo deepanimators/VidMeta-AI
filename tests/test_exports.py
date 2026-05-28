@@ -35,8 +35,15 @@ def test_export_csv_contains_rows():
 
 def test_export_txt_contains_sections():
     exported = export_txt(sample_metadata())
+    assert "LEGEND: Speaker N is the voice cluster" in exported
     assert "YouTube" in exported
     assert "TITLE:" in exported
+
+
+def test_batch_txt_contains_legend():
+    exported = export_txt({"batch_results": [{"file": "a.mp4", "metadata": sample_metadata()}]})
+    assert "LEGEND: Speaker N is the voice cluster" in exported
+    assert "a.mp4" in exported
 
 
 def test_batch_csv_contains_file_column():
