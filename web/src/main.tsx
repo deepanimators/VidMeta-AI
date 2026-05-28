@@ -1426,6 +1426,7 @@ function LiveExtractionPanel({ data }: { data: Partial<LiveExtractionData> }) {
               <button className="mini-button" onClick={() => void copyTextToClipboard(transcriptText)}>Copy</button>
             </div>
           </div>
+          <p className="legend-note">Legend: Speaker N is the voice cluster; Face N is the sampled face cluster.</p>
           <div className="live-text">{transcriptText}</div>
         </div>
       )}
@@ -1581,6 +1582,7 @@ function MetadataView({ metadata, analysis, transcript }: { metadata: Record<str
           <button className="mini-button" onClick={() => void copyTextToClipboard(analysis)}>Copy Analysis</button>
           <button className="mini-button" onClick={() => void copyTextToClipboard(transcript)}>Copy Transcript</button>
         </div>
+        <p className="legend-note">Legend: Speaker N is the voice cluster; Face N is the sampled face cluster.</p>
         <pre>{analysis}</pre>
         <pre>{transcript}</pre>
       </details>

@@ -172,7 +172,7 @@ async def retry_job(job_id: str, payload: RetryJobRequest, request: Request) -> 
 
 @app.post("/api/jobs/{job_id}/stop")
 @limiter.limit("30/minute")
-async def stop_job(job_id: str) -> dict:
+async def stop_job(job_id: str, request: Request) -> dict:
     """Request cancellation of a running job. Returns {stopped: bool}.
 
     This signals the runner to stop processing; best-effort only.

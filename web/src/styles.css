@@ -798,6 +798,13 @@ progress.progress-bar.large {
   margin-top: 18px;
 }
 
+.legend-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .job-retry:hover {
   opacity: 1;
   background: #eff6ff;

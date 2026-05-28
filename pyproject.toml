@@ -31,6 +31,7 @@ offline-diarization = [
     "librosa>=0.10.2",
     "scikit-learn>=1.5.0",
     "numpy>=1.26.0",
+    "face-recognition>=1.3.0",
 ]
 frames = [
     "scenedetect>=0.6.4",

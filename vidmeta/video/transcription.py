@@ -53,7 +53,7 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
             ]
             if not transcript_segments:
                 return "[Silent]"
-            speaker_turns = _diarize_audio(audio_path, transcript_segments)
+            speaker_turns = _diarize_audio(audio_path, transcript_segments, video_path=video_path)
             if speaker_turns:
                 return _format_transcript_with_speakers(transcript_segments, speaker_turns)
             return _format_transcript_with_timestamps(transcript_segments)
@@ -71,7 +71,11 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
             os.remove(audio_path)
 
 
-def _diarize_audio(audio_path: str, segments: list[TranscriptSegment] | None = None) -> list[tuple[float, float, str]]:
+def _diarize_audio(
+    audio_path: str,
+    segments: list[TranscriptSegment] | None = None,
+    video_path: str | None = None,
+) -> list[tuple[float, float, str]]:
     """Attempt diarization. Prefer pyannote Pipeline (HuggingFace) when available,
     otherwise fall back to a lightweight offline clustering-based diarizer.
 
@@ -91,7 +95,7 @@ def _diarize_audio(audio_path: str, segments: list[TranscriptSegment] | None = N
 
     # Offline fallback: use Resemblyzer embeddings + clustering around transcript segments.
     try:
-        return _diarize_offline(audio_path, segments)
+        return _diarize_offline(audio_path, segments, video_path=video_path)
     except Exception:
         return []
 
@@ -118,11 +122,18 @@ def _get_diarization_pipeline() -> object | None:
         return _diarization_pipeline or None
 
 
-def _diarize_offline(audio_path: str, segments: list[TranscriptSegment] | None = None) -> list[tuple[float, float, str]]:
-    """Offline diarization using Resemblyzer + DBSCAN clustering of segment embeddings.
+def _diarize_offline(
+    audio_path: str,
+    segments: list[TranscriptSegment] | None = None,
+    video_path: str | None = None,
+) -> list[tuple[float, float, str]]:
+    """Offline diarization using embeddings plus optional local face alignment.
 
-    This is a lightweight best-effort approach that works without Hugging Face tokens.
-    Requires optional packages: `resemblyzer`, `librosa`, `scikit-learn`, `numpy`.
+    This path is deterministic and local-only. It uses Resemblyzer + DBSCAN for
+    speaker grouping and, when the optional `face-recognition` extra is installed,
+    samples one frame per transcript segment and aligns face clusters to speakers.
+    Required packages for the default offline path: `resemblyzer`, `librosa`,
+    `scikit-learn`, `numpy`.
     """
     if not segments:
         return []
@@ -202,7 +213,67 @@ def _diarize_offline(audio_path: str, segments: list[TranscriptSegment] | None =
         turns.append((s, e, speaker_label))
 
     # merge adjacent segments with same speaker
-    return _merge_adjacent_turns(turns)
+    turns = _merge_adjacent_turns(turns)
+    face_turns = _face_recognition_turns(video_path, segments)
+    if face_turns:
+        turns = _align_speakers_to_faces(turns, face_turns)
+    return turns
+
+
+def _face_recognition_turns(
+    video_path: str | None,
+    segments: list[TranscriptSegment] | None,
+) -> list[tuple[float, float, str]]:
+    """Deterministically cluster sampled faces from the local video file.
+
+    If `face-recognition` is unavailable, returns an empty list. The clustering
+    is greedy and stable in transcript order so the path remains deterministic.
+    """
+    if not video_path or not segments:
+        return []
+    try:
+        import cv2 as _cv2
+        import numpy as _np
+        import face_recognition as _face_recognition
+    except Exception:
+        return []
+
+    capture = _cv2.VideoCapture(video_path)
+    if not capture.isOpened():
+        return []
+
+    centroids: list[_np.ndarray] = []
+    face_turns: list[tuple[float, float, str]] = []
+
+    def _cluster_label(encoding: _np.ndarray) -> str:
+        if not centroids:
+            centroids.append(encoding)
+            return "face_0"
+        distances = [_np.linalg.norm(center - encoding) for center in centroids]
+        best_index = int(_np.argmin(distances))
+        if distances[best_index] <= 0.45:
+            centroids[best_index] = (centroids[best_index] + encoding) / 2.0
+            return f"face_{best_index}"
+        centroids.append(encoding)
+        return f"face_{len(centroids) - 1}"
+
+    try:
+        for segment in segments:
+            midpoint = max(0.0, (float(segment.start) + float(segment.end)) / 2.0)
+            capture.set(_cv2.CAP_PROP_POS_MSEC, midpoint * 1000.0)
+            ok, frame = capture.read()
+            if not ok or frame is None:
+                continue
+            rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
+            encodings = _face_recognition.face_encodings(rgb)
+            if not encodings:
+                continue
+            face_label = _cluster_label(_np.asarray(encodings[0], dtype=_np.float32))
+            face_turns.append((float(segment.start), float(segment.end), face_label))
+    finally:
+        capture.release()
+
+    return _merge_adjacent_turns(face_turns)
 
 
 def _merge_adjacent_turns(turns: list[tuple[float, float, str]], gap_threshold: float = 0.5) -> list[tuple[float, float, str]]:
@@ -224,13 +295,27 @@ def _merge_adjacent_turns(turns: list[tuple[float, float, str]], gap_threshold: 
     return merged
 
 
-def _align_speakers_to_faces(turns: list[tuple[float, float, str]], *_args, **_kwargs) -> list[tuple[float, float, str]]:
-    """Optional hook for face alignment.
-
-    This repository does not currently bundle a face-recognition pipeline, so
-    the offline path remains deterministic and local-only by default.
-    """
-    return turns
+def _align_speakers_to_faces(
+    speaker_turns: list[tuple[float, float, str]],
+    face_turns: list[tuple[float, float, str]],
+) -> list[tuple[float, float, str]]:
+    """Attach the strongest face label to each speaker turn deterministically."""
+    if not speaker_turns or not face_turns:
+        return speaker_turns
+    aligned: list[tuple[float, float, str]] = []
+    for start, end, speaker_label in speaker_turns:
+        best_face = None
+        best_overlap = 0.0
+        for face_start, face_end, face_label in face_turns:
+            overlap = min(end, face_end) - max(start, face_start)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_face = face_label
+        if best_face:
+            aligned.append((start, end, f"{speaker_label} / {best_face}"))
+        else:
+            aligned.append((start, end, speaker_label))
+    return aligned
 
 
 def _format_transcript_with_speakers(
@@ -239,6 +324,9 @@ def _format_transcript_with_speakers(
 ) -> str:
     speaker_names: dict[str, str] = {}
     lines: list[str] = []
+    has_face_labels = any("/" in label for _, _, label in speaker_turns)
+    if has_face_labels:
+        lines.append("[Legend: Speaker N is the voice cluster, Face N is the sampled face cluster]")
     for segment in segments:
         raw_speaker = _best_speaker_for_segment(segment.start, segment.end, speaker_turns)
         name_hint = _speaker_name_hint(segment.text)
@@ -247,7 +335,7 @@ def _format_transcript_with_speakers(
         elif raw_speaker is None:
             speaker_label = "Speaker"
         else:
-            speaker_label = speaker_names.setdefault(raw_speaker, f"Speaker {len(speaker_names) + 1}")
+            speaker_label = speaker_names.setdefault(raw_speaker, _human_speaker_label(raw_speaker, len(speaker_names) + 1))
         lines.append(f"{speaker_label} [{_format_time(segment.start)} - {_format_time(segment.end)}]: {segment.text}")
     return "\n".join(lines).strip() or "[Silent]"
 
@@ -279,6 +367,33 @@ def _speaker_name_hint(text: str) -> str | None:
     if name.lower() in {"speaker", "interviewer", "host", "guest"}:
         return name.title()
     return name
+
+
+def _human_speaker_label(raw_speaker: str, fallback_index: int) -> str:
+    """Render internal speaker IDs in a user-friendly format.
+
+    `spk_0 / face_0` becomes `Speaker 1 / Face 0`.
+    `spk_2` becomes `Speaker 3`.
+    """
+    parts = [part.strip() for part in raw_speaker.split("/") if part.strip()]
+    speaker_part = parts[0] if parts else raw_speaker
+    face_part = parts[1] if len(parts) > 1 else ""
+
+    if speaker_part.startswith("spk_"):
+        suffix = speaker_part.removeprefix("spk_")
+        speaker_text = f"Speaker {suffix}" if suffix.isdigit() else f"Speaker {fallback_index}"
+    else:
+        speaker_text = speaker_part
+
+    if face_part.startswith("face_"):
+        face_suffix = face_part.removeprefix("face_")
+        face_text = f"Face {face_suffix}" if face_suffix.isdigit() else face_part.replace("_", " ").title()
+    elif face_part:
+        face_text = face_part.replace("_", " ").title()
+    else:
+        face_text = ""
+
+    return f"{speaker_text} / {face_text}".strip(" /")
 
 
 def _format_time(seconds: float) -> str:
