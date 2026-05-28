@@ -312,6 +312,11 @@ a {
   color: #fff;
 }
 
+.primary.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
 .secondary {
   width: 100%;
   background: #eff6ff;
@@ -754,6 +759,43 @@ progress.progress-bar.large {
   background: #fff0f0;
   color: var(--danger);
   border-color: #fecaca;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.dialog-card {
+  width: min(520px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.dialog-card h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+
+.dialog-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .job-retry:hover {

@@ -53,8 +53,7 @@ def transcribe_audio(video_path: str, model_size: str) -> str:
             ]
             if not transcript_segments:
                 return "[Silent]"
-
-                speaker_turns = _diarize_audio(audio_path, transcript_segments)
+            speaker_turns = _diarize_audio(audio_path, transcript_segments)
             if speaker_turns:
                 return _format_transcript_with_speakers(transcript_segments, speaker_turns)
             return _format_transcript_with_timestamps(transcript_segments)
@@ -225,6 +224,15 @@ def _merge_adjacent_turns(turns: list[tuple[float, float, str]], gap_threshold: 
     return merged
 
 
+def _align_speakers_to_faces(turns: list[tuple[float, float, str]], *_args, **_kwargs) -> list[tuple[float, float, str]]:
+    """Optional hook for face alignment.
+
+    This repository does not currently bundle a face-recognition pipeline, so
+    the offline path remains deterministic and local-only by default.
+    """
+    return turns
+
+
 def _format_transcript_with_speakers(
     segments: list[TranscriptSegment],
     speaker_turns: list[tuple[float, float, str]],
@@ -233,7 +241,10 @@ def _format_transcript_with_speakers(
     lines: list[str] = []
     for segment in segments:
         raw_speaker = _best_speaker_for_segment(segment.start, segment.end, speaker_turns)
-        if raw_speaker is None:
+        name_hint = _speaker_name_hint(segment.text)
+        if name_hint:
+            speaker_label = name_hint
+        elif raw_speaker is None:
             speaker_label = "Speaker"
         else:
             speaker_label = speaker_names.setdefault(raw_speaker, f"Speaker {len(speaker_names) + 1}")
@@ -248,6 +259,26 @@ def _format_transcript_with_timestamps(segments: list[TranscriptSegment]) -> str
 
 def _format_plain_transcript(text: str) -> str:
     return text or "[Silent]"
+
+
+def _speaker_name_hint(text: str) -> str | None:
+    """Best-effort offline speaker-name heuristic.
+
+    Recognizes simple local transcript prefixes like `John:` or `Sarah -`.
+    This does not query the internet and only uses transcript text.
+    """
+    import re
+
+    candidate = text.strip()
+    if len(candidate) < 3:
+        return None
+    match = re.match(r"^([A-Z][A-Za-z0-9_.-]{1,30})\s*[:\-–—]\s+", candidate)
+    if not match:
+        return None
+    name = match.group(1).strip()
+    if name.lower() in {"speaker", "interviewer", "host", "guest"}:
+        return name.title()
+    return name
 
 
 def _format_time(seconds: float) -> str:

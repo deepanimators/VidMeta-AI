@@ -78,15 +78,20 @@ def main():
             json.dump(out, fo)
         return 0
     except Exception as exc:
+        cancelled = _canceled or "cancelled" in str(exc).lower()
         # write failure
         if job_id:
             try:
-                db.update_job(job_id, status="failed", stage="failed", error_message=str(exc))
-                db.add_job_event(job_id, "failed", 0, str(exc))
+                if cancelled:
+                    db.update_job(job_id, status="failed", stage="cancelled", error_message="Job cancelled by user")
+                    db.add_job_event(job_id, "cancelled", 0, "Job cancelled by user")
+                else:
+                    db.update_job(job_id, status="failed", stage="failed", error_message=str(exc))
+                    db.add_job_event(job_id, "failed", 0, str(exc))
             except Exception:
                 pass
         with open(args.output, "w", encoding="utf-8") as fo:
-            json.dump({"ok": False, "error": str(exc)}, fo)
+            json.dump({"ok": False, "error": "Job cancelled by user" if cancelled else str(exc)}, fo)
         return 1
 
 

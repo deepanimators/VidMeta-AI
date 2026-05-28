@@ -368,6 +368,7 @@ function App() {
   const [message, setMessage] = React.useState("");
   const [uploadProgress, setUploadProgress] = React.useState(0);
   const [liveData, setLiveData] = React.useState<Partial<LiveExtractionData> | null>(null);
+  const [stopDialogJobId, setStopDialogJobId] = React.useState<string | null>(null);
   const [providerKeys, setProviderKeys] = React.useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem("vidmeta_provider_keys") ?? "{}"); } catch { return {}; }
   });
@@ -690,7 +691,6 @@ function App() {
   }
 
   async function stopJob(jobId: string) {
-    if (!confirm("Stop this job? This will attempt to cancel analysis.")) return;
     try {
       await api(`/api/jobs/${jobId}/stop`, { method: "POST" });
       setMessage("Stop requested");
@@ -698,6 +698,15 @@ function App() {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Stop failed");
     }
+    setStopDialogJobId(null);
+  }
+
+  function requestStop(jobId: string) {
+    setStopDialogJobId(jobId);
+  }
+
+  function closeStopDialog() {
+    setStopDialogJobId(null);
   }
 
   async function deleteJob(jobId: string) {
@@ -961,7 +970,7 @@ function App() {
                     className="job-stop"
                     title="Stop job"
                     aria-label="Stop job"
-                    onClick={(e) => { e.stopPropagation(); void stopJob(job.id); }}
+                    onClick={(e) => { e.stopPropagation(); requestStop(job.id); }}
                   >
                     <XIcon size={13} />
                   </button>
@@ -1001,7 +1010,7 @@ function App() {
                   <a key={format} href={`${API_BASE}/api/jobs/${selectedJob.id}/exports/${format}`}><Download size={15} /> {format.toUpperCase()}</a>
                 ))}
                 {selectedJob.status === "running" && (
-                  <button type="button" className="job-stop secondary" onClick={() => void stopJob(selectedJob.id)}>Stop</button>
+                  <button type="button" className="job-stop secondary" onClick={() => requestStop(selectedJob.id)}>Stop</button>
                 )}
               </div>
             </div>
@@ -1010,6 +1019,18 @@ function App() {
           </section>
         )}
       </section>
+      {stopDialogJobId && (
+        <div className="dialog-backdrop" role="presentation" onClick={closeStopDialog}>
+          <div className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="stop-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="stop-dialog-title">Stop running job?</h3>
+            <p>This will request cancellation and attempt to terminate the worker process. Unsaved progress may be lost.</p>
+            <div className="dialog-actions">
+              <button type="button" className="secondary" onClick={closeStopDialog}>Keep running</button>
+              <button type="button" className="primary danger" onClick={() => void stopJob(stopDialogJobId)}>Stop job</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 

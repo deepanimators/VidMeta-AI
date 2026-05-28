@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Simple CLI to run offline diarization on a video or audio file.
-Usage: python scripts/diarize_demo.py /path/to/video.mp4 [whisper_model_size]
+
+Usage:
+    python scripts/diarize_demo.py /path/to/video.mp4 [whisper_model_size]
+
+Notes:
+    - Uses local Whisper transcription plus the offline diarizer.
+    - Requires optional packages from the `offline-diarization` extra.
 """
 import sys
 import json

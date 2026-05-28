@@ -407,6 +407,7 @@ class JobRunner:
     ) -> dict[str, Any]:
         # prepare request JSON
         req = {
+            "job_id": job_id,
             "source_path": source_path,
             "brand": brand.model_dump() if hasattr(brand, "model_dump") else brand,
             "video": video.model_dump() if hasattr(video, "model_dump") else video,
@@ -454,7 +455,7 @@ class JobRunner:
                 with open(output_file.name, "r", encoding="utf-8") as fo:
                     out = json.load(fo)
             except Exception as exc:
-                raise RuntimeError(f"Worker failed: {stderr.decode() if stderr else exc}") from exc
+                raise RuntimeError(f"Worker failed: {stderr.decode(errors='ignore') if stderr else exc}") from exc
 
             if not out.get("ok"):
                 raise RuntimeError(out.get("error") or "Worker reported failure")

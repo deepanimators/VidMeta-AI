@@ -25,6 +25,23 @@ dependencies = [
     "cryptography>=42.0.0",
 ]
 
+[project.optional-dependencies]
+offline-diarization = [
+    "resemblyzer>=0.1.4",
+    "librosa>=0.10.2",
+    "scikit-learn>=1.5.0",
+    "numpy>=1.26.0",
+]
+frames = [
+    "scenedetect>=0.6.4",
+    "ultralytics>=8.3.0",
+    "easyocr>=1.7.0",
+    "moondream>=1.1.0",
+]
+cloud-diarization = [
+    "pyannote.audio>=3.3.2",
+]
+
 [project.scripts]
 vidmeta = "vidmeta.cli:main"
 
