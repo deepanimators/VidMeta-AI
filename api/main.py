@@ -83,7 +83,7 @@ async def create_job_from_upload(upload_id: str, payload: UploadJobRequest, requ
 
 
 @app.get("/api/jobs")
-async def list_jobs(limit: int = 50) -> list[dict]:
+async def list_jobs(limit: int = 10) -> list[dict]:
     return db.list_jobs(limit=limit)
 
 

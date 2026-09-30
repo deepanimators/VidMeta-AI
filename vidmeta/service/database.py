@@ -346,7 +346,7 @@ class Database:
         job["events"] = events or [_fallback_event(job)]
         return job
 
-    def list_jobs(self, limit: int = 50) -> list[dict[str, Any]]:
+    def list_jobs(self, limit: int = 10) -> list[dict[str, Any]]:
         with self.connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
